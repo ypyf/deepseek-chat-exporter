@@ -1,0 +1,62 @@
+{
+    "extName": {
+        "message": "DeepSeek 聊天导出器",
+        "description": "The name of the extension"
+    },
+    "extDescription": {
+        "message": "将您的 DeepSeek 聊天对话导出为 JSON、Markdown、HTML 或纯文本格式",
+        "description": "The description of the extension"
+    },
+    "exportButtonText": {
+        "message": "导出聊天",
+        "description": "Text for the export button"
+    },
+    "noMessagesFound": {
+        "message": "没有找到可导出的消息。请在进行一些对话后再试。",
+        "description": "Alert shown when no messages are found to export"
+    },
+    "exportError": {
+        "message": "导出过程中发生错误。请查看控制台了解详情。",
+        "description": "Alert shown when an error occurs during export"
+    },
+    "noMessagesOnPage": {
+        "message": "没有找到可导出的消息。请在有聊天内容的页面上再试。",
+        "description": "Alert shown when no messages are found on the page"
+    },
+    "exportFailed": {
+        "message": "导出聊天失败。请查看控制台了解详情。",
+        "description": "Alert shown when export fails"
+    },
+    "exportAsMarkdown": {
+        "message": "导出为 Markdown",
+        "description": "Export as Markdown option in the menu"
+    },
+    "exportAsJSON": {
+        "message": "导出为 JSON",
+        "description": "Export as JSON option in the menu"
+    },
+    "exportAsText": {
+        "message": "导出为纯文本",
+        "description": "Export as plain text option in the menu"
+    },
+    "exportAsHTML": {
+        "message": "导出为 HTML",
+        "description": "Export as HTML option in the menu"
+    },
+    "copyToClipboard": {
+        "message": "复制到剪贴板",
+        "description": "Copy to clipboard option in the menu"
+    },
+    "downloadFile": {
+        "message": "下载文件",
+        "description": "Download file option in the menu"
+    },
+    "exportSuccess": {
+        "message": "导出成功！",
+        "description": "Message shown when export is successful"
+    },
+    "copiedToClipboard": {
+        "message": "已复制到剪贴板",
+        "description": "Message shown when content is copied to clipboard"
+    }
+}

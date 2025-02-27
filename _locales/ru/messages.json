@@ -1,0 +1,62 @@
+{
+    "extName": {
+        "message": "Экспортер чатов DeepSeek",
+        "description": "The name of the extension"
+    },
+    "extDescription": {
+        "message": "Экспортируйте ваши диалоги DeepSeek в формат JSON, Markdown, HTML или текстовый файл",
+        "description": "The description of the extension"
+    },
+    "exportButtonText": {
+        "message": "Экспорт чата",
+        "description": "Text for the export button"
+    },
+    "noMessagesFound": {
+        "message": "Не найдено сообщений для экспорта. Пожалуйста, попробуйте снова после того, как произойдет диалог.",
+        "description": "Alert shown when no messages are found to export"
+    },
+    "exportError": {
+        "message": "Произошла ошибка при экспорте. Пожалуйста, проверьте консоль для получения подробностей.",
+        "description": "Alert shown when an error occurs during export"
+    },
+    "noMessagesOnPage": {
+        "message": "Не найдено сообщений для экспорта. Пожалуйста, попробуйте снова на странице с содержимым чата.",
+        "description": "Alert shown when no messages are found on the page"
+    },
+    "exportFailed": {
+        "message": "Не удалось экспортировать чат. Пожалуйста, проверьте консоль для получения подробностей.",
+        "description": "Alert shown when export fails"
+    },
+    "exportAsMarkdown": {
+        "message": "Экспорт в Markdown",
+        "description": "Export as Markdown option in the menu"
+    },
+    "exportAsJSON": {
+        "message": "Экспорт в JSON",
+        "description": "Export as JSON option in the menu"
+    },
+    "exportAsText": {
+        "message": "Экспорт в текстовый файл",
+        "description": "Export as plain text option in the menu"
+    },
+    "exportAsHTML": {
+        "message": "Экспорт в HTML",
+        "description": "Export as HTML option in the menu"
+    },
+    "copyToClipboard": {
+        "message": "Копировать в буфер обмена",
+        "description": "Copy to clipboard option in the menu"
+    },
+    "downloadFile": {
+        "message": "Скачать файл",
+        "description": "Download file option in the menu"
+    },
+    "exportSuccess": {
+        "message": "Экспорт успешно выполнен!",
+        "description": "Message shown when export is successful"
+    },
+    "copiedToClipboard": {
+        "message": "Скопировано в буфер обмена",
+        "description": "Message shown when content is copied to clipboard"
+    }
+}

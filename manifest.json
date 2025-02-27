@@ -1,0 +1,63 @@
+{
+    "manifest_version": 3,
+    "name": "__MSG_extName__",
+    "version": "1.0.0",
+    "description": "__MSG_extDescription__",
+    "default_locale": "en",
+    "permissions": [
+        "activeTab",
+        "storage"
+    ],
+    "action": {
+        "default_icon": {
+            "16": "icons/icon16.png",
+            "48": "icons/icon48.png",
+            "128": "icons/icon128.png"
+        },
+        "default_title": "__MSG_extName__"
+    },
+    "icons": {
+        "16": "icons/icon16.png",
+        "48": "icons/icon48.png",
+        "128": "icons/icon128.png"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "*://*.deepseek.com/*",
+                "*://*.deepseek.ai/*",
+                "*://deepseek.com/*",
+                "*://deepseek.ai/*"
+            ],
+            "js": [
+                "utils.js",
+                "content.js"
+            ],
+            "css": [
+                "styles.css"
+            ],
+            "run_at": "document_idle"
+        }
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "icons/*"
+            ],
+            "matches": [
+                "<all_urls>"
+            ]
+        },
+        {
+            "resources": [
+                "styles.css"
+            ],
+            "matches": [
+                "<all_urls>"
+            ]
+        }
+    ]
+}

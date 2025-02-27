@@ -1,0 +1,147 @@
+/**
+ * DeepSeek Chat Exporter - Styles
+ */
+
+/* SVG 箭头图标样式 */
+.arrow-icon {
+  width: 16px;
+  height: 16px;
+  margin-left: 6px;
+  transition: transform 0.2s ease;
+  vertical-align: middle;
+  transform: rotate(0deg); /* 默认朝下 */
+}
+
+/* 按钮样式调整，使其能够正确显示文本和图标 */
+#deepseek-export-btn {
+  position: relative;
+  background-color: #4285f4;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 16px;
+  margin-top: 16px;
+  margin-right: 16px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+  opacity: 0.9; /* Slightly transparent by default */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  z-index: 9999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#deepseek-export-btn:hover {
+  background-color: #3367d6;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  transform: translateY(-2px);
+  opacity: 1; /* Fully opaque on hover */
+}
+
+#deepseek-export-btn:active {
+  background-color: #2a56c6;
+  transform: translateY(0);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Dropdown menu styles */
+#deepseek-export-dropdown {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 9999999;
+  overflow: hidden;
+  width: 180px;
+}
+
+.deepseek-export-option {
+  padding: 10px 15px;
+  font-size: 14px;
+  color: #333;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.deepseek-export-option:hover {
+  background-color: #f5f5f5;
+}
+
+/* Container for button and dropdown */
+.deepseek-export-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999999;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin: 0;
+  padding: 0;
+}
+
+/* Animation for button when new messages are added */
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.pulse {
+  animation: pulse 0.5s ease-in-out;
+}
+
+/* Ensure button is visible on different DeepSeek themes */
+@media (prefers-color-scheme: dark) {
+  #deepseek-export-btn {
+    background-color: #5c9aff;
+    color: white;
+  }
+
+  #deepseek-export-btn:hover {
+    background-color: #4285f4;
+  }
+
+  #deepseek-export-dropdown {
+    background-color: #333;
+    border: 1px solid #444;
+  }
+
+  .deepseek-export-option {
+    color: #eee;
+  }
+
+  .deepseek-export-option:hover {
+    background-color: #444;
+  }
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  #deepseek-export-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .deepseek-export-container {
+    top: 10px;
+    right: 10px;
+  }
+
+  #deepseek-export-dropdown {
+    width: 150px;
+  }
+
+  .arrow-icon {
+    width: 14px;
+    height: 14px;
+    margin-left: 4px;
+  }
+}
