@@ -58,7 +58,7 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   z-index: 9999999;
   overflow: hidden;
-  width: 180px;
+  width: 200px; /* 增加宽度以容纳图标和文本 */
 }
 
 .deepseek-export-option {
@@ -68,6 +68,28 @@
   cursor: pointer;
   transition: background-color 0.2s;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  display: flex;
+  align-items: center;
+  white-space: nowrap; /* 防止文本换行 */
+  overflow: hidden; /* 防止内容溢出 */
+}
+
+/* 导出选项中的图标样式 */
+.option-icon {
+  display: inline-block;
+  margin-right: 8px;
+  font-size: 16px;
+  min-width: 20px;
+  text-align: center;
+  flex-shrink: 0; /* 防止图标缩小 */
+}
+
+/* 导出选项中的文本样式 */
+.option-text {
+  overflow: hidden;
+  text-overflow: ellipsis; /* 文本过长时显示省略号 */
+  white-space: nowrap;
+  flex-grow: 1; /* 允许文本容器占据剩余空间 */
 }
 
 .deepseek-export-option:hover {
@@ -136,12 +158,17 @@
   }
 
   #deepseek-export-dropdown {
-    width: 150px;
+    width: 170px; /* 移动端下也增加宽度 */
   }
 
   .arrow-icon {
     width: 14px;
     height: 14px;
     margin-left: 4px;
+  }
+
+  .option-icon {
+    font-size: 14px;
+    margin-right: 6px;
   }
 }

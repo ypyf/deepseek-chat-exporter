@@ -1,6 +1,6 @@
 {
     "extName": {
-        "message": "Экспортер чатов DeepSeek",
+        "message": "Экспортер диалогов чата DeepSeek",
         "description": "The name of the extension"
     },
     "extDescription": {
@@ -58,5 +58,41 @@
     "copiedToClipboard": {
         "message": "Скопировано в буфер обмена",
         "description": "Message shown when content is copied to clipboard"
+    },
+    "supportAuthor": {
+        "message": "Поддержите нас",
+        "description": "Text for the support author link"
+    },
+    "featureFormatTitle": {
+        "message": "Несколько форматов экспорта",
+        "description": "Title for the export formats feature"
+    },
+    "featureFormatDesc": {
+        "message": "Поддерживает форматы JSON, Markdown, HTML и обычный текст для различных потребностей",
+        "description": "Description for the export formats feature"
+    },
+    "featureCompleteTitle": {
+        "message": "Полное сохранение диалогов",
+        "description": "Title for the complete conversation feature"
+    },
+    "featureCompleteDesc": {
+        "message": "Сохраняет вопросы пользователя, ответы ИИ и процессы мышления для полной записи",
+        "description": "Description for the complete conversation feature"
+    },
+    "featureLanguageTitle": {
+        "message": "Многоязычная поддержка",
+        "description": "Title for the language support feature"
+    },
+    "featureLanguageDesc": {
+        "message": "Поддерживает интерфейсы на английском, упрощенном китайском, традиционном китайском и русском языках",
+        "description": "Description for the language support feature"
+    },
+    "usageTipTitle": {
+        "message": "Совет по использованию:",
+        "description": "Title for the usage tip"
+    },
+    "usageTipContent": {
+        "message": "Нажмите кнопку \"Экспорт чата\" в правом верхнем углу страницы чата DeepSeek и выберите нужный формат для экспорта текущего разговора.",
+        "description": "Content for the usage tip"
     }
 }

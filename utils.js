@@ -52,7 +52,7 @@ function createHash(str) {
  * @param {number} wait - The debounce wait time in milliseconds
  * @returns {Function} A debounced function
  */
-function debounce(func, wait) {
+function debounce(func, wait = 300) {
   let timeout;
   return function(...args) {
     const context = this;

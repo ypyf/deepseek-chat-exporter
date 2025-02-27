@@ -1,6 +1,6 @@
 {
     "extName": {
-        "message": "DeepSeek 聊天导出器",
+        "message": "DeepSeek 聊天对话导出器",
         "description": "The name of the extension"
     },
     "extDescription": {
@@ -58,5 +58,41 @@
     "copiedToClipboard": {
         "message": "已复制到剪贴板",
         "description": "Message shown when content is copied to clipboard"
+    },
+    "supportAuthor": {
+        "message": "支持我们",
+        "description": "Text for the support author link"
+    },
+    "featureFormatTitle": {
+        "message": "多种导出格式",
+        "description": "Title for the export formats feature"
+    },
+    "featureFormatDesc": {
+        "message": "支持JSON、Markdown、HTML和纯文本格式，满足不同需求",
+        "description": "Description for the export formats feature"
+    },
+    "featureCompleteTitle": {
+        "message": "完整保留对话",
+        "description": "Title for the complete conversation feature"
+    },
+    "featureCompleteDesc": {
+        "message": "保留用户问题、AI回答和思考过程，完整记录对话内容",
+        "description": "Description for the complete conversation feature"
+    },
+    "featureLanguageTitle": {
+        "message": "多语言支持",
+        "description": "Title for the language support feature"
+    },
+    "featureLanguageDesc": {
+        "message": "支持英文、简体中文、繁体中文和俄语界面",
+        "description": "Description for the language support feature"
+    },
+    "usageTipTitle": {
+        "message": "使用提示：",
+        "description": "Title for the usage tip"
+    },
+    "usageTipContent": {
+        "message": "在DeepSeek聊天页面右上角点击\"导出聊天\"按钮，选择您需要的格式即可导出当前对话。",
+        "description": "Content for the usage tip"
     }
 }

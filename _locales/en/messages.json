@@ -1,6 +1,6 @@
 {
     "extName": {
-        "message": "DeepSeek Chat Exporter",
+        "message": "DeepSeek Chat Conversations Exporter",
         "description": "The name of the extension"
     },
     "extDescription": {
@@ -58,5 +58,41 @@
     "copiedToClipboard": {
         "message": "Copied to clipboard",
         "description": "Message shown when content is copied to clipboard"
+    },
+    "supportAuthor": {
+        "message": "Support Us",
+        "description": "Text for the support author link"
+    },
+    "featureFormatTitle": {
+        "message": "Multiple Export Formats",
+        "description": "Title for the export formats feature"
+    },
+    "featureFormatDesc": {
+        "message": "Supports JSON, Markdown, HTML, and Plain Text formats to meet different needs",
+        "description": "Description for the export formats feature"
+    },
+    "featureCompleteTitle": {
+        "message": "Complete Conversation Preservation",
+        "description": "Title for the complete conversation feature"
+    },
+    "featureCompleteDesc": {
+        "message": "Preserves user questions, AI responses, and thinking processes for a complete record",
+        "description": "Description for the complete conversation feature"
+    },
+    "featureLanguageTitle": {
+        "message": "Multi-language Support",
+        "description": "Title for the language support feature"
+    },
+    "featureLanguageDesc": {
+        "message": "Supports English, Simplified Chinese, Traditional Chinese, and Russian interfaces",
+        "description": "Description for the language support feature"
+    },
+    "usageTipTitle": {
+        "message": "Usage Tip:",
+        "description": "Title for the usage tip"
+    },
+    "usageTipContent": {
+        "message": " Click the \"Export Chat\" button in the top-right corner of the DeepSeek chat page and select your desired format to export the current conversation.",
+        "description": "Content for the usage tip"
     }
 }
