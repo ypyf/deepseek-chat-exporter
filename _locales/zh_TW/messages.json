@@ -19,10 +19,6 @@
         "message": "匯出過程中發生錯誤。請查看控制台了解詳情。",
         "description": "Alert shown when an error occurs during export"
     },
-    "noMessagesOnPage": {
-        "message": "沒有找到可匯出的訊息。請在有聊天內容的頁面上再試。",
-        "description": "Alert shown when no messages are found on the page"
-    },
     "exportFailed": {
         "message": "匯出聊天失敗。請查看控制台了解詳情。",
         "description": "Alert shown when export fails"

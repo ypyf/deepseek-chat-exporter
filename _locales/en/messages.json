@@ -19,10 +19,6 @@
         "message": "An error occurred during export. Please check the console for details.",
         "description": "Alert shown when an error occurs during export"
     },
-    "noMessagesOnPage": {
-        "message": "No messages found to export. Please try again on a page with chat content.",
-        "description": "Alert shown when no messages are found on the page"
-    },
     "exportFailed": {
         "message": "Failed to export chat. Please check the console for details.",
         "description": "Alert shown when export fails"

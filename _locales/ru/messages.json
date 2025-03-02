@@ -19,10 +19,6 @@
         "message": "Произошла ошибка при экспорте. Пожалуйста, проверьте консоль для получения подробностей.",
         "description": "Alert shown when an error occurs during export"
     },
-    "noMessagesOnPage": {
-        "message": "Не найдено сообщений для экспорта. Пожалуйста, попробуйте снова на странице с содержимым чата.",
-        "description": "Alert shown when no messages are found on the page"
-    },
     "exportFailed": {
         "message": "Не удалось экспортировать чат. Пожалуйста, проверьте консоль для получения подробностей.",
         "description": "Alert shown when export fails"
