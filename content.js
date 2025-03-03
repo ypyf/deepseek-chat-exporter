@@ -407,8 +407,7 @@ function generateMarkdownCode(language, content) {
 function domToMarkdown(domElement) {
   // 检查输入是否为DOM元素
   if (!(domElement instanceof HTMLElement)) {
-    console.error('输入必须是一个DOM元素');
-    return '';
+    return domElement;
   }
 
   // 直接处理代码块元素
@@ -603,7 +602,7 @@ function convertToMarkdown(data) {
     // Add chain of thought if available
     if (msg.chain_of_thought) {
       markdown += `<details>\n<summary>Chain of Thought</summary>\n\n`;
-      markdown += `${msg.chain_of_thought}\n\n`;
+      markdown += `${extractParagraphs(msg.chain_of_thought)}\n\n`;
       markdown += `</details>\n\n`;
     }
 
@@ -636,7 +635,7 @@ function convertToPlainText(data) {
     text += msg.role === 'user' ? `${msg.content}\n\n` : `${domToMarkdown(msg.content)}\n\n`;
     if (msg.role === 'assistant' && msg.chain_of_thought) {
       text += `Thinking process:\n\n`;
-      text += `${msg.chain_of_thought}\n\n`;
+      text += `${extractParagraphs(msg.chain_of_thought)}\n\n`;
     }
 
     // Add separator between messages
@@ -646,6 +645,24 @@ function convertToPlainText(data) {
   });
 
   return text;
+}
+
+/**
+ * Extract paragraphs from DOM element
+ * @param {HTMLElement} element - The DOM element to process
+ * @returns {string} - Text content with preserved paragraphs
+ */
+function extractParagraphs(element) {
+  if (!element) return '';
+
+  const paragraphs = [];
+  element.querySelectorAll('p').forEach(p => {
+    paragraphs.push(p.textContent.trim());
+  });
+
+  return paragraphs.length > 0 ?
+    paragraphs.join('\n') :
+    element.textContent.trim();
 }
 
 /**
@@ -738,7 +755,7 @@ function extractAllMessagesFromPage() {
         messages.push(aiMessage);
       }
       else if (type === 'cot') {
-        cot = element.textContent.trim();
+        cot = element;
       }
     });
     return { title: conversationTitle.textContent.trim(), messages };
@@ -1070,7 +1087,7 @@ function convertToHTML(data) {
     if (msg.chain_of_thought) {
       html += `    <div class="chain-of-thought">
       <div class="chain-of-thought-header">Thinking Process:</div>
-      ${msg.chain_of_thought}
+      ${msg.chain_of_thought.innerHTML}
     </div>`;
     }
 
@@ -1095,7 +1112,7 @@ function convertToJSON(formattedData) {
       return {
         role: msg.role,
         content: domToMarkdown(msg.content),
-        chain_of_thought: msg.chain_of_thought,
+        chain_of_thought: extractParagraphs(msg.chain_of_thought),
       }
     }
     return {
