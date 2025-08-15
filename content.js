@@ -303,23 +303,23 @@ function downloadChat(exportData, format) {
       const markdownContent = convertToMarkdown(formattedData);
       blob = new Blob([markdownContent], { type: 'text/markdown' });
       contentType = 'text/markdown';
-      filename = `deepseek-chat.md`;
+      filename = `${formattedData.title}.md`;
     } else if (format === 'text') {
       const textContent = convertToPlainText(formattedData);
       blob = new Blob([textContent], { type: 'text/plain' });
       contentType = 'text/plain';
-      filename = `deepseek-chat.txt`;
+      filename = `${formattedData.title}.txt`;
     } else if (format === 'html') {
       const htmlContent = convertToHTML(formattedData);
       blob = new Blob([htmlContent], { type: 'text/html' });
       contentType = 'text/html';
-      filename = `deepseek-chat.html`;
+      filename = `${formattedData.title}.html`;
     } else {
       // 对于 JSON 格式，直接使用格式化后的数据
       const jsonContent = convertToJSON(formattedData);
       blob = new Blob([JSON.stringify(jsonContent, null, 2)], { type: 'application/json' });
       contentType = 'application/json';
-      filename = `deepseek-chat.json`;
+      filename = `${formattedData.title}.json`;
     }
 
     // 创建并下载文件
