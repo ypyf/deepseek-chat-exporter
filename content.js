@@ -807,6 +807,10 @@ function cleanCodeBlockDOM(domElement) {
     const banners = codeBlock.querySelectorAll('.md-code-block-banner-wrap');
     banners.forEach(banner => banner.remove());
 
+    // 删除svg元素
+    const svgs = codeBlock.querySelectorAll('svg');
+    svgs.forEach(svg => svg.remove());
+
     // 删除footer元素
     const footers = codeBlock.querySelectorAll('.md-code-block-footer');
     footers.forEach(footer => footer.remove());
