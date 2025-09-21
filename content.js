@@ -671,17 +671,17 @@ function extractParagraphs(element) {
  */
 function extractAllMessagesFromPage() {
   try {
-    // 1. 查找用户问题 (使用 .fbb737a4 类)
+    // 1. 查找用户问题
     const userQuestions = document.querySelectorAll('.fbb737a4');
 
-    // 2. 查找AI回答 (使用 .ds-markdown 和 .ds-markdown--block 类)
+    // 2. 查找AI回答
     const aiResponses = document.querySelectorAll('.ds-markdown, .ds-markdown--block');
 
-    // 3. 查找思考过程容器 (使用 .e1675d8b 类)
+    // 3. 查找思考过程容器
     const cotContainers = document.querySelectorAll('.e1675d8b');
 
     // 4. 查找对话标题
-    const conversationTitle = document.querySelector('.d8ed659a');
+    const conversationTitle = document.querySelector('.f8d1e4c0');
 
     // 如果没有找到任何消息，返回空数组
     if (userQuestions.length === 0 && aiResponses.length === 0 && cotContainers.length === 0) {
