@@ -371,21 +371,9 @@ function texToMarkdown(domElements) {
  * @returns {Object} 包含language和content的对象，如果提取失败则返回null
  */
 function extractMarkdownCodeInfo(domElement) {
-  // 早期返回：检查输入是否为DOM元素
-  if (!(domElement instanceof HTMLElement)) {
-    console.error('Input must be a DOM element');
-    return null;
-  }
-
-  // 检查是否为代码块元素
-  if (!domElement.classList.contains('md-code-block')) {
-    console.error('Input element is not a valid code block');
-    return null;
-  }
-
   try {
     // 提取语言信息
-    const infoStringElement = domElement.querySelector('.md-code-block-infostring');
+    const infoStringElement = domElement.querySelector('.d813de27');
     const language = infoStringElement ? infoStringElement.textContent.trim() : '';
 
     // 提取代码内容
@@ -458,10 +446,10 @@ function domToMarkdown(domElement) {
         if (child.nodeType === Node.ELEMENT_NODE) {
           content += domToMarkdown(child);
         } else if (child.nodeType === Node.TEXT_NODE) {
-          content += child.textContent.trim();
+          content += child.textContent;
         }
       }
-      return `${prefix} ${content}\n\n`;
+      return `${prefix} ${content.trim()}\n\n`;
     }
     case 'p': {
       // 处理段落内容，包括子元素
