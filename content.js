@@ -346,6 +346,26 @@ function downloadChat(exportData, format) {
 }
 
 /**
+ * 从 KaTeX 渲染的 DOM 中提取 TeX 源码并转换为 Markdown
+ * @param {NodeListOf<Element> | Element[]} domElements - TeX注释节点集合
+ * @returns {string} 转换后的 Markdown 文本
+ */
+function texToMarkdown(domElements) {
+  let content = '';
+
+  domElements.forEach(node => {
+    const tex = node.textContent.trim();
+    // 把包含该 annotation 的最外层 KaTeX 节点替换为 TeX（视为行内）
+    const katexSpan = node.closest('span.katex') || node.parentElement;
+    if (katexSpan) {
+      content += `$${tex}$`;
+    }
+  });
+
+  return content;
+}
+
+/**
  * 从Markdown转换的HTML代码块中提取语言和内容
  * @param {HTMLElement} domElement - 代码块的DOM元素
  * @returns {Object} 包含language和content的对象，如果提取失败则返回null
@@ -417,6 +437,9 @@ function domToMarkdown(domElement) {
       return generateMarkdownCode(codeInfo.language, codeInfo.content) + '\n\n';
     }
     return '';
+  } else if (domElement.classList.contains('katex')) {
+    const annotations = domElement.querySelectorAll('annotation[encoding="application/x-tex"]');
+    return texToMarkdown(annotations);
   }
 
   // 处理各种元素类型
