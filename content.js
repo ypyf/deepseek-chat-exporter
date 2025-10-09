@@ -1067,6 +1067,16 @@ function convertToHTML(data) {
       max-width: 100%;
       border-radius: 6px;
     }
+
+    .katex .katex-mathml {
+      clip: rect(1px, 1px, 1px, 1px);
+      border: 0;
+      width: 100px;
+      height: 50px;
+      padding: 0;
+      position: absolute;
+      overflow: hidden;
+    }
   </style>
 </head>
 <body>
