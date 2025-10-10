@@ -684,10 +684,10 @@ function extractAllMessagesFromPage() {
     const userQuestions = document.querySelectorAll('.fbb737a4');
 
     // 2. 查找AI回答
-    const aiResponses = document.querySelectorAll('.ds-markdown');
+    const aiResponses = document.querySelectorAll('.ds-message .ds-markdown:not(.ds-think-content .ds-markdown)');
 
     // 3. 查找思考过程容器
-    const cotContainers = document.querySelectorAll('.ds-think-content');
+    const cotContainers = document.querySelectorAll('.ds-message .ds-think-content');
 
     // 4. 查找对话标题
     const conversationTitle = document.querySelector('.f8d1e4c0');
