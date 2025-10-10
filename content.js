@@ -248,9 +248,8 @@ function addExportStyles() {
  */
 function exportChat(format) {
   try {
-    // 直接从页面提取最新消息
     const {title, messages} = extractAllMessagesFromPage();
-    if (messages.length === 0) {
+    if (!Array.isArray(messages) || messages.length === 0) {
       alert(chrome.i18n.getMessage('noMessagesFound'));
       return;
     }
@@ -315,7 +314,6 @@ function downloadChat(exportData, format) {
       contentType = 'text/html';
       filename = `${formattedData.title}.html`;
     } else {
-      // 对于 JSON 格式，直接使用格式化后的数据
       const jsonContent = convertToJSON(formattedData);
       blob = new Blob([JSON.stringify(jsonContent, null, 2)], { type: 'application/json' });
       contentType = 'application/json';
@@ -686,17 +684,16 @@ function extractAllMessagesFromPage() {
     const userQuestions = document.querySelectorAll('.fbb737a4');
 
     // 2. 查找AI回答
-    const aiResponses = document.querySelectorAll('.ds-markdown, .ds-markdown--block');
+    const aiResponses = document.querySelectorAll('.ds-markdown');
 
     // 3. 查找思考过程容器
-    const cotContainers = document.querySelectorAll('.e1675d8b');
+    const cotContainers = document.querySelectorAll('.ds-think-content');
 
     // 4. 查找对话标题
     const conversationTitle = document.querySelector('.f8d1e4c0');
 
-    // 如果没有找到任何消息，返回空数组
     if (userQuestions.length === 0 && aiResponses.length === 0 && cotContainers.length === 0) {
-      return [];
+      return { };
     }
 
     // 创建一个数组来存储所有消息元素及其类型和位置
@@ -736,34 +733,30 @@ function extractAllMessagesFromPage() {
 
     // 处理排序后的元素
     const messages = [];
-    let currentUserQuestion = null;
-
     let cot = null;
     allElements.forEach((item, index) => {
       const { element, type } = item;
       if (type === 'user') {
         // 处理用户问题
-        currentUserQuestion = {
+        const message = {
           role: 'user',
           content: element.textContent.trim(),
           element_id: element.id || `user-${index}-${Date.now()}`
         };
-        messages.push(currentUserQuestion);
+        messages.push(message);
       }
       else if (type === 'ai') {
         // 处理AI回答
-        const aiMessage = {
+        const message = {
           role: 'assistant',
+          content: element,
           element_id: element.id || `ai-${index}-${Date.now()}`
         };
-
-        aiMessage.content = element;
-
         if (cot !== null) {
-          aiMessage.chain_of_thought = cot;
+          message.chain_of_thought = cot;
           cot = null;
         }
-        messages.push(aiMessage);
+        messages.push(message);
       }
       else if (type === 'cot') {
         cot = element;
@@ -772,7 +765,7 @@ function extractAllMessagesFromPage() {
     return { title: conversationTitle.textContent.trim(), messages };
   } catch (error) {
     console.error('Error extracting messages from page:', error);
-    return [];
+    return { };
   }
 }
 
@@ -1138,11 +1131,11 @@ function convertToJSON(formattedData) {
         role: msg.role,
         content: domToMarkdown(msg.content),
         chain_of_thought: extractParagraphs(msg.chain_of_thought),
-      }
+      };
     }
     return {
       role: msg.role,
-      content: msg.content
+      content: domToMarkdown(msg.content),
     }
   })
   return {
