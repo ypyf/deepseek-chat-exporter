@@ -406,6 +406,131 @@ function generateMarkdownCode(language, content) {
 }
 
 /**
+ * 将HTML表格转换为Markdown格式
+ * @param {HTMLElement} tableElement - 表格DOM元素
+ * @returns {string} 转换后的Markdown表格文本
+ */
+function convertTableToMarkdown(tableElement) {
+  if (!tableElement || tableElement.nodeName.toLowerCase() !== 'table') {
+    return '';
+  }
+
+  // 提取表头
+  let headers = [];
+  let skipFirstRow = false;
+  const thead = tableElement.querySelector('thead');
+
+  if (thead) {
+    const headerRow = thead.querySelector('tr');
+    if (headerRow) {
+      const thElements = headerRow.querySelectorAll('th, td');
+      headers = Array.from(thElements).map(cell => {
+        let content = '';
+        for (const child of cell.childNodes) {
+          if (child.nodeType === Node.ELEMENT_NODE) {
+            content += domToMarkdown(child);
+          } else if (child.nodeType === Node.TEXT_NODE) {
+            content += child.textContent;
+          }
+        }
+        // 处理管道符和换行符
+        return content.trim().replace(/\|/g, '\\|').replace(/\n/g, ' ');
+      });
+    }
+  } else {
+    // 如果没有thead，查找第一个tr作为表头
+    const tbody = tableElement.querySelector('tbody');
+    const firstRow = tbody ? tbody.querySelector('tr') : tableElement.querySelector('tr');
+
+    if (firstRow) {
+      skipFirstRow = true;
+      const thElements = firstRow.querySelectorAll('th');
+      if (thElements.length > 0) {
+        headers = Array.from(thElements).map(cell => {
+          let content = '';
+          for (const child of cell.childNodes) {
+            if (child.nodeType === Node.ELEMENT_NODE) {
+              content += domToMarkdown(child);
+            } else if (child.nodeType === Node.TEXT_NODE) {
+              content += child.textContent;
+            }
+          }
+          return content.trim().replace(/\|/g, '\\|').replace(/\n/g, ' ');
+        });
+      } else {
+        // 如果第一行没有th，使用td作为表头
+        const tdElements = firstRow.querySelectorAll('td');
+        headers = Array.from(tdElements).map(cell => {
+          let content = '';
+          for (const child of cell.childNodes) {
+            if (child.nodeType === Node.ELEMENT_NODE) {
+              content += domToMarkdown(child);
+            } else if (child.nodeType === Node.TEXT_NODE) {
+              content += child.textContent;
+            }
+          }
+          return content.trim().replace(/\|/g, '\\|').replace(/\n/g, ' ');
+        });
+      }
+    }
+  }
+
+  if (headers.length === 0) {
+    return '';
+  }
+
+  // 提取数据行
+  const rows = [];
+  const tbody = tableElement.querySelector('tbody');
+  const rowElements = tbody ? tbody.querySelectorAll('tr') : tableElement.querySelectorAll('tr');
+
+  Array.from(rowElements).forEach((row, index) => {
+    // 如果第一行被用作表头，跳过它
+    if (skipFirstRow && index === 0) {
+      return;
+    }
+
+    const cells = row.querySelectorAll('td, th');
+    const rowData = Array.from(cells).map(cell => {
+      let content = '';
+      for (const child of cell.childNodes) {
+        if (child.nodeType === Node.ELEMENT_NODE) {
+          content += domToMarkdown(child);
+        } else if (child.nodeType === Node.TEXT_NODE) {
+          content += child.textContent;
+        }
+      }
+      // 处理管道符和换行符
+      return content.trim().replace(/\|/g, '\\|').replace(/\n/g, ' ');
+    });
+
+    // 确保行数据长度与表头一致
+    while (rowData.length < headers.length) {
+      rowData.push('');
+    }
+    if (rowData.length > 0) {
+      rows.push(rowData.slice(0, headers.length));
+    }
+  });
+
+  // 生成Markdown表格
+  let markdown = '';
+
+  // 表头行
+  markdown += '| ' + headers.join(' | ') + ' |\n';
+
+  // 分隔行
+  markdown += '| ' + headers.map(() => '---').join(' | ') + ' |\n';
+
+  // 数据行
+  rows.forEach(row => {
+    markdown += '| ' + row.join(' | ') + ' |\n';
+  });
+
+  return markdown + '\n';
+}
+
+/**
  * 将DOM元素转换为Markdown格式
  * @param {HTMLElement} domElement - 要转换的DOM元素
  * @returns {string} 转换后的Markdown文本
@@ -534,7 +659,8 @@ function domToMarkdown(domElement) {
           content += child.textContent;
         }
       }
-      return `**${content.trim()}**`;
+      const text = content.trim();
+      return `**${text}**`;
     }
     case 'em':
     case 'i': {
@@ -562,6 +688,9 @@ function domToMarkdown(domElement) {
     }
     case 'br': {
       return `\n`;
+    }
+    case 'table': {
+      return convertTableToMarkdown(domElement);
     }
     default: {
       // 对于其他元素，处理所有子节点
