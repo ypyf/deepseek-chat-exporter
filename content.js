@@ -346,21 +346,71 @@ function downloadChat(exportData, format) {
 /**
  * 从 KaTeX 渲染的 DOM 中提取 TeX 源码并转换为 Markdown
  * @param {NodeListOf<Element> | Element[]} domElements - TeX注释节点集合
+ * @param {HTMLElement} katexElement - KaTeX DOM元素，用于判断是块级还是行内
  * @returns {string} 转换后的 Markdown 文本
  */
-function texToMarkdown(domElements) {
+function texToMarkdown(domElements, katexElement) {
   let content = '';
 
   domElements.forEach(node => {
     const tex = node.textContent.trim();
-    // 把包含该 annotation 的最外层 KaTeX 节点替换为 TeX（视为行内）
+    // 把包含该 annotation 的最外层 KaTeX 节点替换为 TeX
     const katexSpan = node.closest('span.katex') || node.parentElement;
     if (katexSpan) {
-      content += `$${tex}$`;
+      content += tex;
     }
   });
 
-  return content;
+  if (!content) {
+    return '';
+  }
+
+  // 判断是块级还是行内数学公式
+  let isBlock = false;
+  if (katexElement) {
+    try {
+      const tagName = katexElement.tagName.toLowerCase();
+      const computedStyle = window.getComputedStyle(katexElement);
+      const display = computedStyle.display;
+
+      // 如果不是span，或者display是block，则为块级
+      if (tagName !== 'span' || display === 'block') {
+        isBlock = true;
+      } else {
+        // 检查父元素上下文
+        const parent = katexElement.parentElement;
+        if (parent) {
+          const parentTag = parent.tagName.toLowerCase();
+          // 如果父元素是段落(p)，通常是行内
+          // 如果父元素是div或其他块级元素，且KaTeX是主要内容，可能是块级
+          if (parentTag !== 'p') {
+            // 检查是否有其他非空文本兄弟节点
+            const siblings = Array.from(parent.childNodes);
+            const hasOtherContent = siblings.some(node =>
+              node !== katexElement &&
+              node.nodeType === Node.TEXT_NODE &&
+              node.textContent.trim()
+            );
+            // 如果没有其他文本内容，可能是块级数学公式
+            if (!hasOtherContent) {
+              isBlock = true;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // 如果无法获取样式，默认使用行内
+      console.warn('Could not determine math display type:', e);
+    }
+  }
+
+  if (isBlock) {
+    // 块级数学公式使用 $$...$$，前后需要空行
+    return `\n\n$$${content}$$\n\n`;
+  } else {
+    // 行内数学公式使用 $...$
+    return `$${content}$`;
+  }
 }
 
 /**
@@ -550,7 +600,7 @@ function domToMarkdown(domElement) {
     return '';
   } else if (domElement.classList.contains('katex')) {
     const annotations = domElement.querySelectorAll('annotation[encoding="application/x-tex"]');
-    return texToMarkdown(annotations);
+    return texToMarkdown(annotations, domElement);
   }
 
   // 处理各种元素类型
