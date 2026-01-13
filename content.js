@@ -369,31 +369,48 @@ function texToMarkdown(domElements, katexElement) {
   let isBlock = false;
   if (katexElement) {
     try {
-      const tagName = katexElement.tagName.toLowerCase();
-      const computedStyle = window.getComputedStyle(katexElement);
-      const display = computedStyle.display;
+      // 首先检查是否在行内上下文中（标题、链接、强调等）
+      let isInlineContext = false;
+      let current = katexElement.parentElement;
+      while (current) {
+        const tagName = current.tagName.toLowerCase();
+        // 如果在标题、链接、强调、代码等行内元素中，强制使用行内数学
+        if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'a', 'strong', 'b', 'em', 'i', 'code'].includes(tagName)) {
+          isInlineContext = true;
+          break;
+        }
+        current = current.parentElement;
+      }
 
-      // 如果不是span，或者display是block，则为块级
-      if (tagName !== 'span' || display === 'block') {
-        isBlock = true;
+      if (isInlineContext) {
+        isBlock = false;
       } else {
-        // 检查父元素上下文
-        const parent = katexElement.parentElement;
-        if (parent) {
-          const parentTag = parent.tagName.toLowerCase();
-          // 如果父元素是段落(p)，通常是行内
-          // 如果父元素是div或其他块级元素，且KaTeX是主要内容，可能是块级
-          if (parentTag !== 'p') {
-            // 检查是否有其他非空文本兄弟节点
-            const siblings = Array.from(parent.childNodes);
-            const hasOtherContent = siblings.some(node =>
-              node !== katexElement &&
-              node.nodeType === Node.TEXT_NODE &&
-              node.textContent.trim()
-            );
-            // 如果没有其他文本内容，可能是块级数学公式
-            if (!hasOtherContent) {
-              isBlock = true;
+        const tagName = katexElement.tagName.toLowerCase();
+        const computedStyle = window.getComputedStyle(katexElement);
+        const display = computedStyle.display;
+
+        // 如果不是span，或者display是block，则为块级
+        if (tagName !== 'span' || display === 'block') {
+          isBlock = true;
+        } else {
+          // 检查父元素上下文
+          const parent = katexElement.parentElement;
+          if (parent) {
+            const parentTag = parent.tagName.toLowerCase();
+            // 如果父元素是段落(p)，通常是行内
+            // 如果父元素是div或其他块级元素，且KaTeX是主要内容，可能是块级
+            if (parentTag !== 'p') {
+              // 检查是否有其他非空文本兄弟节点
+              const siblings = Array.from(parent.childNodes);
+              const hasOtherContent = siblings.some(node =>
+                node !== katexElement &&
+                node.nodeType === Node.TEXT_NODE &&
+                node.textContent.trim()
+              );
+              // 如果没有其他文本内容，可能是块级数学公式
+              if (!hasOtherContent) {
+                isBlock = true;
+              }
             }
           }
         }
@@ -737,7 +754,8 @@ function domToMarkdown(domElement) {
       return `---\n\n`;
     }
     case 'br': {
-      return `\n`;
+      // Markdown 硬换行需要两个空格加换行
+      return `  \n`;
     }
     case 'table': {
       return convertTableToMarkdown(domElement);
