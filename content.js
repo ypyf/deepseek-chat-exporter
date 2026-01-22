@@ -422,8 +422,7 @@ function texToMarkdown(domElements, katexElement) {
   }
 
   if (isBlock) {
-    // 块级数学公式使用 $$...$$，前后需要空行
-    return `\n\n$$${content}$$\n\n`;
+    return `$$${content}$$\n\n`;
   } else {
     // 行内数学公式使用 $...$
     return `$${content}$`;
