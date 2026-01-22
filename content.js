@@ -767,9 +767,9 @@ function domToMarkdown(domElement) {
         if (child.nodeType === Node.ELEMENT_NODE) {
           result += domToMarkdown(child);
         } else if (child.nodeType === Node.TEXT_NODE) {
-          const text = child.textContent.trim();
+          const text = child.textContent;
           if (text) {
-            result += text + ' ';
+            result += text;
           }
         }
       }
