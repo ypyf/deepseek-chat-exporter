@@ -1154,16 +1154,40 @@ function convertToHTML(data) {
 
     .chain-of-thought {
       margin-top: 15px;
-      padding: 15px;
+    }
+
+    .chain-of-thought details {
       background-color: var(--chain-bg);
       border-radius: 8px;
       border-left: 3px solid var(--chain-border);
+      overflow: hidden;
     }
 
-    .chain-of-thought-header {
+    .chain-of-thought summary {
+      padding: 12px 15px;
       font-weight: 600;
-      margin-bottom: 10px;
+      cursor: pointer;
       color: var(--chain-title);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      user-select: none;
+    }
+
+    .chain-of-thought summary::after {
+      content: '▼';
+      font-size: 10px;
+      transition: transform 0.2s ease;
+    }
+
+    .chain-of-thought details[open] summary::after {
+      transform: rotate(180deg);
+    }
+
+    .chain-of-thought-content {
+      padding: 15px;
+      border-top: 1px solid var(--chain-border);
+      color: var(--text-primary);
     }
 
     pre {
@@ -1300,8 +1324,12 @@ function convertToHTML(data) {
     // 添加思考过程（如果有）
     if (msg.chain_of_thought) {
       html += `    <div class="chain-of-thought">
-      <div class="chain-of-thought-header">Thinking Process:</div>
-      ${msg.chain_of_thought.innerHTML}
+      <details>
+        <summary>Thinking Process</summary>
+        <div class="chain-of-thought-content">
+          ${msg.chain_of_thought.innerHTML}
+        </div>
+      </details>
     </div>`;
     }
 
