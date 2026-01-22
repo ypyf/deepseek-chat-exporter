@@ -796,19 +796,19 @@ function convertToMarkdown(data) {
     const roleName = msg.role === 'user' ? 'User' : 'DeepSeek AI';
     markdown += `## ${roleIcon} ${roleName}\n\n`;
 
+    // Add chain of thought first (before content) to match DeepSeek website
+    if (msg.role === 'assistant' && msg.chain_of_thought) {
+      markdown += `<details>\n<summary>Chain of Thought</summary>\n\n`;
+      markdown += `${extractParagraphs(msg.chain_of_thought)}\n\n`;
+      markdown += `</details>\n\n`;
+    }
+
     // Process the content with special handling for code blocks
     if (msg.role === 'assistant') {
       const formattedContent = domToMarkdown(msg.content);
       markdown += `${formattedContent}\n\n`;
     } else {
       markdown += `${msg.content}\n\n`;
-    }
-
-    // Add chain of thought if available
-    if (msg.chain_of_thought) {
-      markdown += `<details>\n<summary>Chain of Thought</summary>\n\n`;
-      markdown += `${extractParagraphs(msg.chain_of_thought)}\n\n`;
-      markdown += `</details>\n\n`;
     }
 
     // Add separator between messages
@@ -837,11 +837,14 @@ function convertToPlainText(data) {
     // Format the role header
     const roleName = msg.role === 'user' ? 'User' : 'DeepSeek AI';
     text += `${roleName}:\n\n`;
-    text += msg.role === 'user' ? `${msg.content}\n\n` : `${domToMarkdown(msg.content)}\n\n`;
+
+    // Add chain of thought first (before content) to match DeepSeek website
     if (msg.role === 'assistant' && msg.chain_of_thought) {
       text += `Thinking process:\n\n`;
       text += `${extractParagraphs(msg.chain_of_thought)}\n\n`;
     }
+
+    text += msg.role === 'user' ? `${msg.content}\n\n` : `${domToMarkdown(msg.content)}\n\n`;
 
     // Add separator between messages
     if (index < data.messages.length - 1) {
@@ -1316,12 +1319,9 @@ function convertToHTML(data) {
     <div class="message-header">
       <span>${roleIcon}</span>
       <span class="message-role">${roleName}</span>
-    </div>
-    <div class="message-content">
-      ${processedContent}
     </div>`;
 
-    // 添加思考过程（如果有）
+    // Add chain of thought first (before content) to match DeepSeek website
     if (msg.chain_of_thought) {
       html += `    <div class="chain-of-thought">
       <details>
@@ -1333,7 +1333,10 @@ function convertToHTML(data) {
     </div>`;
     }
 
-    html += `  </div>\n`;
+    html += `    <div class="message-content">
+      ${processedContent}
+    </div>
+  </div>\n`;
   });
 
   // 关闭HTML结构
