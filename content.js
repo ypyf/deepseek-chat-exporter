@@ -1145,6 +1145,10 @@ function convertToHTML(data) {
       overflow-wrap: break-word;
     }
 
+    .message-container.ai-message .message-content {
+      margin-top: 12px;
+    }
+
     .user-message .message-content {
       background-color: var(--user-msg-bg);
       border-left: 3px solid var(--user-accent);
