@@ -246,8 +246,10 @@ function addExportStyles() {
  * Export the chat to a file in the specified format
  * @param {string} format - The format to export ('json', 'markdown', or 'text')
  */
-function exportChat(format) {
+async function exportChat(format) {
   try {
+    await waitForDiagramBlocksReady();
+    await prepareDiagramCodeBlocks();
     const {title, messages} = extractAllMessagesFromPage();
     if (!Array.isArray(messages) || messages.length === 0) {
       alert(chrome.i18n.getMessage('noMessagesFound'));
@@ -270,6 +272,180 @@ function exportChat(format) {
   }
 }
 
+function waitForBlockCodeReady(block, timeoutMs = 2500) {
+  const getPreText = () => (block.querySelector('pre')?.textContent || '').trim();
+  if (getPreText()) {
+    return Promise.resolve(true);
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    let observer = null;
+    let timerId = null;
+    const done = (ok) => {
+      if (settled) return;
+      settled = true;
+      if (timerId !== null) window.clearTimeout(timerId);
+      if (observer) observer.disconnect();
+      resolve(ok);
+    };
+    observer = new MutationObserver(() => {
+      if (getPreText()) done(true);
+    });
+    observer.observe(block, { childList: true, subtree: true, characterData: true });
+    timerId = window.setTimeout(() => done(!!getPreText()), timeoutMs);
+  });
+}
+
+function triggerTab(tab) {
+  if (!tab) return;
+  try {
+    tab.click();
+  } catch (e) {}
+  const events = ['pointerdown', 'mousedown', 'mouseup', 'click'];
+  events.forEach(type => {
+    try {
+      tab.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+    } catch (e) {}
+  });
+}
+
+function waitForBlockChartReady(block, timeoutMs = 2500) {
+  const hasChart = () => !!block.querySelector('svg.mermaid-svg, .mermaid-svg');
+  if (hasChart()) {
+    return Promise.resolve(true);
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    let observer = null;
+    let timerId = null;
+    const done = (ok) => {
+      if (settled) return;
+      settled = true;
+      if (timerId !== null) window.clearTimeout(timerId);
+      if (observer) observer.disconnect();
+      resolve(ok);
+    };
+    observer = new MutationObserver(() => {
+      if (hasChart()) done(true);
+    });
+    observer.observe(block, { childList: true, subtree: true, characterData: true });
+    timerId = window.setTimeout(() => done(hasChart()), timeoutMs);
+  });
+}
+
+async function prepareDiagramCodeBlocks() {
+  const blocks = Array.from(document.querySelectorAll('.md-code-block')).filter(isDiagramCodeBlock);
+  const tasks = blocks.map(async (block) => {
+    const tabs = Array.from(block.querySelectorAll('[role="tab"]'));
+    const selectedTab = tabs.find(tab => tab.getAttribute('aria-selected') === 'true' || tab.classList.contains('ds-segmented-button--selected')) || null;
+    const selectedText = (selectedTab?.textContent || '').trim();
+    const chartTab = tabs.find(tab => /图表|diagram/i.test((tab.textContent || '').trim()));
+    const codeTab = tabs.find(tab => /代码|code/i.test((tab.textContent || '').trim()));
+    let preText = (block.querySelector('pre')?.textContent || '').trim();
+    const chartWasSelected = /图表|diagram/i.test(selectedText);
+
+    if (!preText && codeTab) {
+      const selected = codeTab.getAttribute('aria-selected') === 'true' || codeTab.classList.contains('ds-segmented-button--selected');
+      if (!selected) {
+        triggerTab(codeTab);
+      }
+      await waitForBlockCodeReady(block);
+      preText = (block.querySelector('pre')?.textContent || '').trim();
+    }
+
+    if (preText) {
+      block.setAttribute('data-export-code', preText);
+      const langText = (block.querySelector('.d813de27')?.textContent || '').trim();
+      if (langText) {
+        block.setAttribute('data-export-lang', langText);
+      }
+    }
+
+    if (chartTab && chartWasSelected) {
+      triggerTab(chartTab);
+      await waitForBlockChartReady(block);
+    } else if (selectedTab) {
+      triggerTab(selectedTab);
+    }
+  });
+  await Promise.all(tasks);
+}
+
+function isDiagramCodeBlock(block) {
+  if (!(block instanceof HTMLElement)) return false;
+  const tabText = (block.querySelector('[role="tablist"]')?.textContent || '').trim();
+  if (/图表|diagram|mermaid/i.test(tabText)) return true;
+  if (block.querySelector('svg.mermaid-svg, .mermaid-svg')) return true;
+  const preText = (block.querySelector('pre')?.textContent || '').trim();
+  if (/(^|\n)\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|quadrantChart|gitGraph)\b/i.test(preText)) {
+    return true;
+  }
+  return false;
+}
+
+function isDiagramCodeBlockReady(block) {
+  if (block.querySelector('.ds-loading')) return false;
+  const preText = (block.querySelector('pre')?.textContent || '').trim();
+  if (preText) return true;
+  if (block.querySelector('svg.mermaid-svg, .mermaid-svg')) return true;
+  return false;
+}
+
+function getDiagramBlockStatus() {
+  const allBlocks = Array.from(document.querySelectorAll('.md-code-block'));
+  const diagramBlocks = allBlocks.filter(isDiagramCodeBlock);
+  const readyCount = diagramBlocks.filter(isDiagramCodeBlockReady).length;
+  return {
+    total: diagramBlocks.length,
+    readyCount,
+    ready: diagramBlocks.length === 0 || readyCount === diagramBlocks.length
+  };
+}
+
+function waitForDiagramBlocksReady(timeoutMs = 10000) {
+  const initialStatus = getDiagramBlockStatus();
+  if (initialStatus.ready) {
+    return Promise.resolve(initialStatus);
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    let observer = null;
+    let timerId = null;
+    const finalize = (status) => {
+      if (settled) return;
+      settled = true;
+      if (timerId !== null) {
+        window.clearTimeout(timerId);
+      }
+      if (observer) observer.disconnect();
+      resolve(status);
+    };
+
+    const check = () => {
+      const status = getDiagramBlockStatus();
+      if (status.ready) {
+        finalize(status);
+      }
+    };
+
+    observer = new MutationObserver(() => {
+      check();
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
+
+    timerId = window.setTimeout(() => {
+      const status = getDiagramBlockStatus();
+      status.timedOut = true;
+      finalize(status);
+    }, timeoutMs);
+  });
+}
+
 /**
  * Download chat data as a file in the specified format
  * @param {Object} exportData - The data to export
@@ -288,6 +464,9 @@ function downloadChat(exportData, format) {
           role: msg.role,
           content: msg.content,
         };
+        if (msg.role === 'user' && Array.isArray(msg.attachments) && msg.attachments.length > 0) {
+          formattedMsg.attachments = msg.attachments;
+        }
         if (msg.role === 'assistant' && msg.chain_of_thought) {
           formattedMsg.chain_of_thought = msg.chain_of_thought;
         }
@@ -296,28 +475,32 @@ function downloadChat(exportData, format) {
     };
 
     let blob, filename;
+    const rawTitle = (formattedData.title || '').trim() || getDefaultConversationTitle();
+    const safeTitle = typeof sanitizeFilename === 'function'
+      ? sanitizeFilename(rawTitle)
+      : rawTitle.replace(/[/\\?%*:|"<>]/g, '-');
 
     // 根据格式处理导出
     if (format === 'markdown') {
       const markdownContent = convertToMarkdown(formattedData);
       blob = new Blob([markdownContent], { type: 'text/markdown' });
       contentType = 'text/markdown';
-      filename = `${formattedData.title}.md`;
+      filename = `${safeTitle}.md`;
     } else if (format === 'text') {
       const textContent = convertToPlainText(formattedData);
       blob = new Blob([textContent], { type: 'text/plain' });
       contentType = 'text/plain';
-      filename = `${formattedData.title}.txt`;
+      filename = `${safeTitle}.txt`;
     } else if (format === 'html') {
       const htmlContent = convertToHTML(formattedData);
       blob = new Blob([htmlContent], { type: 'text/html' });
       contentType = 'text/html';
-      filename = `${formattedData.title}.html`;
+      filename = `${safeTitle}.html`;
     } else {
       const jsonContent = convertToJSON(formattedData);
       blob = new Blob([JSON.stringify(jsonContent, null, 2)], { type: 'application/json' });
       contentType = 'application/json';
-      filename = `${formattedData.title}.json`;
+      filename = `${safeTitle}.json`;
     }
 
     // 创建并下载文件
@@ -436,13 +619,108 @@ function texToMarkdown(domElements, katexElement) {
  */
 function extractMarkdownCodeInfo(domElement) {
   try {
-    // 提取语言信息
-    const infoStringElement = domElement.querySelector('.d813de27');
-    const language = infoStringElement ? infoStringElement.textContent.trim() : '';
+    const cachedCode = (domElement.getAttribute('data-export-code') || '').trim();
+    const cachedLang = (domElement.getAttribute('data-export-lang') || '').trim();
+    if (cachedCode) {
+      return {
+        language: cachedLang || (/^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|quadrantChart|gitGraph)\b/i.test(cachedCode) ? 'mermaid' : ''),
+        content: cachedCode
+      };
+    }
 
-    // 提取代码内容
+    const infoStringElement =
+      domElement.querySelector('.d813de27') ||
+      domElement.querySelector('[data-language]') ||
+      domElement.querySelector('.md-code-block-banner-wrap [class*="language"]');
+    let language = infoStringElement
+      ? (infoStringElement.getAttribute('data-language') || infoStringElement.textContent || '').trim()
+      : '';
+    if (!language) {
+      const bannerText = (domElement.querySelector('.md-code-block-banner-wrap')?.textContent || '').trim();
+      if (bannerText && !/^(代码|code|图表|diagram)$/i.test(bannerText)) {
+        language = bannerText.split(/\s+/)[0];
+      }
+    }
+    const selectedTabText = (domElement.querySelector('[role="tab"][aria-selected="true"]')?.textContent || '').trim();
+    const codeTabSelected = /代码|code/i.test(selectedTabText);
     const preElement = domElement.querySelector('pre');
-    const content = preElement ? preElement.textContent : '';
+    const preText = preElement ? (preElement.textContent || '').replace(/\u00A0/g, ' ').trim() : '';
+    const mermaidSyntaxPattern = /(^|\n)\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|quadrantChart|gitGraph)\b/i;
+
+    if (preText) {
+      if (!language && mermaidSyntaxPattern.test(preText)) {
+        language = 'mermaid';
+      }
+      if (codeTabSelected || mermaidSyntaxPattern.test(preText)) {
+        return {
+          language: language || '',
+          content: preText
+        };
+      }
+    }
+
+    const candidates = [];
+    const addCandidate = (value) => {
+      if (typeof value !== 'string') return;
+      const normalized = value.replace(/\u00A0/g, ' ').trim();
+      if (!normalized) return;
+      candidates.push(normalized);
+    };
+
+    domElement.querySelectorAll('pre, code, textarea').forEach(el => {
+      addCandidate(el.textContent || '');
+      if (typeof el.value === 'string') {
+        addCandidate(el.value);
+      }
+    });
+
+    const maybeSource = domElement.querySelector('.mermaid');
+    if (maybeSource) {
+      addCandidate(maybeSource.textContent || '');
+    }
+
+    const uniqueCandidates = Array.from(new Set(candidates));
+    const hasMermaidSvg = !!domElement.querySelector('svg.mermaid-svg, .mermaid-svg');
+    const tabText = (domElement.querySelector('[role="tablist"]')?.textContent || '').trim();
+    const preferMermaid = hasMermaidSvg || /图表|diagram|mermaid/i.test(tabText);
+    const scoreCandidate = (value) => {
+      let score = 0;
+      if (value.includes('\n')) score += 10;
+      if (/[{};]|-->|==>|subgraph|\bend\b/i.test(value)) score += 10;
+      if (mermaidSyntaxPattern.test(value)) score += preferMermaid ? 80 : 30;
+      if (/^<svg[\s>]/i.test(value) || /#mermaid-svg-|\.edgePath|flowchart-link/.test(value)) score -= 60;
+      if (/diagram content unavailable/i.test(value)) score -= 100;
+      score += Math.min(value.length, 400) / 20;
+      return score;
+    };
+
+    uniqueCandidates.sort((a, b) => scoreCandidate(b) - scoreCandidate(a));
+    let content = uniqueCandidates.length > 0 ? uniqueCandidates[0] : '';
+
+    if (!content) {
+      const svgTexts = Array.from(domElement.querySelectorAll('svg text, svg foreignObject, svg .nodeLabel, svg .edgeLabel'))
+        .map(node => (node.textContent || '').replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
+      const uniqueSvgTexts = Array.from(new Set(svgTexts)).slice(0, 80);
+      if (uniqueSvgTexts.length > 0) {
+        if (preferMermaid) {
+          content = `%% Mermaid source unavailable in DOM\n%% Diagram labels: ${uniqueSvgTexts.join(' | ')}`;
+          if (!language) language = 'mermaid';
+        } else {
+          content = `[diagram]\n${uniqueSvgTexts.join(' ')}`;
+          if (!language) language = 'diagram';
+        }
+      }
+    }
+
+    if (!content) {
+      content = preferMermaid ? '%% Mermaid source unavailable in DOM' : '[diagram content unavailable]';
+      if (!language) language = preferMermaid ? 'mermaid' : 'diagram';
+    }
+
+    if (!language && /(?:graph|flowchart|sequencediagram|classdiagram|statediagram|erdiagram|gantt|pie|mindmap|timeline|quadrantchart|gitgraph)/i.test(content)) {
+      language = 'mermaid';
+    }
 
     return {
       language,
@@ -777,6 +1055,210 @@ function domToMarkdown(domElement) {
   }
 }
 
+function normalizeAssistantContent(domElement) {
+  if (!(domElement instanceof HTMLElement)) {
+    return {
+      element: domElement,
+      references: []
+    };
+  }
+
+  const cloned = domElement.cloneNode(true);
+  const references = [];
+  const referenceMap = new Map();
+  const buildReferenceLabel = (element) => {
+    const countTextNode = element ? element.querySelector('._669a677') : null;
+    const countText = countTextNode ? (countTextNode.textContent || '').trim() : '';
+    const domains = Array.from((element || document).querySelectorAll('img.site_logo_img'))
+      .map(img => {
+        const src = (img.getAttribute('src') || '').trim();
+        if (!src) return '';
+        try {
+          const pathname = new URL(src, window.location.href).pathname || '';
+          return pathname.split('/').filter(Boolean).pop() || '';
+        } catch (e) {
+          return '';
+        }
+      })
+      .filter(Boolean);
+    const uniqueDomains = Array.from(new Set(domains));
+    const labelParts = [];
+    if (countText) labelParts.push(countText);
+    if (uniqueDomains.length > 0) labelParts.push(uniqueDomains.join(', '));
+    return labelParts.join(' - ');
+  };
+  const ensureReference = (href, label) => {
+    const key = `${href || ''}__${label || ''}`;
+    let index = referenceMap.get(key);
+    if (!index) {
+      references.push({ href: href || '', label: label || '' });
+      index = references.length;
+      referenceMap.set(key, index);
+    }
+    return index;
+  };
+  const citeLinks = cloned.querySelectorAll('a');
+
+  citeLinks.forEach(link => {
+    const citeNode = link.querySelector('.ds-markdown-cite');
+    const sourceNode = link.querySelector('.f93f59e4');
+    const hasSiteLogos = link.querySelectorAll('.site_logo_img').length > 0;
+    const href = (link.getAttribute('href') || '').trim();
+    const isReferenceLink = !!citeNode || !!sourceNode || hasSiteLogos;
+    if (!isReferenceLink || !href) return;
+
+    const label = buildReferenceLabel(link);
+    const index = ensureReference(href, label);
+
+    const marker = cloned.ownerDocument.createTextNode(`[${index}]`);
+    link.replaceWith(marker);
+  });
+
+  const standaloneSources = cloned.querySelectorAll('.f93f59e4');
+  standaloneSources.forEach(source => {
+    if (source.closest('a')) return;
+    const label = buildReferenceLabel(source);
+    if (!label) return;
+    const index = ensureReference('', label);
+    const marker = cloned.ownerDocument.createTextNode(`[${index}]`);
+    source.replaceWith(marker);
+  });
+
+  return {
+    element: cloned,
+    references
+  };
+}
+
+function assistantElementToMarkdown(domElement) {
+  const normalized = normalizeAssistantContent(domElement);
+  const base = domToMarkdown(normalized.element).trim();
+  return {
+    content: base,
+    references: normalized.references
+  };
+}
+
+function referencesToMarkdown(referenceItems) {
+  if (!Array.isArray(referenceItems) || referenceItems.length === 0) {
+    return '';
+  }
+  return referenceItems
+    .map((item, index) => {
+      const href = (item && item.href ? item.href : '').trim();
+      const label = (item && item.label ? item.label : '').replace(/\]/g, '\\]').trim();
+      if (label && href) return `${index + 1}. [${label}](${href})`;
+      if (href) return `${index + 1}. [${href}](${href})`;
+      if (label) return `${index + 1}. ${label}`;
+      return `${index + 1}.`;
+    })
+    .join('\n');
+}
+
+function referencesToPlainText(referenceItems) {
+  if (!Array.isArray(referenceItems) || referenceItems.length === 0) {
+    return '';
+  }
+  return referenceItems
+    .map((item, index) => {
+      const href = (item && item.href ? item.href : '').trim();
+      const label = (item && item.label ? item.label : '').trim();
+      if (label && href) return `${index + 1}. ${label} - ${href}`;
+      if (href) return `${index + 1}. ${href}`;
+      if (label) return `${index + 1}. ${label}`;
+      return `${index + 1}.`;
+    })
+    .join('\n');
+}
+
+function getDefaultConversationTitle() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `DeepSeek-Chat-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+}
+
+function getConversationTitle() {
+  const nodes = [
+    document.querySelector('.f8d1e4c0 .afa34042'),
+    document.querySelector('.f8d1e4c0')
+  ];
+
+  for (const node of nodes) {
+    if (!node) continue;
+    const text = (node.textContent || '').trim();
+    if (text) return text;
+  }
+
+  const pageTitle = (document.title || '').trim();
+  if (pageTitle) return pageTitle;
+  return getDefaultConversationTitle();
+}
+
+function extractUserAttachments(messageElement) {
+  const container = messageElement.closest('.ds-message') || messageElement.closest('._9663006');
+  if (!container) return [];
+
+  const nameNodes = Array.from(container.querySelectorAll('.f3a54b52'));
+  const sizeNodes = Array.from(container.querySelectorAll('.dc832104'));
+  const attachments = [];
+  const seen = new Set();
+
+  nameNodes.forEach((nameNode, index) => {
+    const name = (nameNode.textContent || '').trim();
+    const size = (sizeNodes[index] && sizeNodes[index].textContent ? sizeNodes[index].textContent : '').trim();
+    if (!name) return;
+
+    const key = `${name}__${size}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    const type = size ? size.split(/\s+/)[0] : '';
+    attachments.push({ name, size, type });
+  });
+
+  return attachments;
+}
+
+function formatUserContent(text, attachments) {
+  const normalizedText = (text || '').trim();
+  if (!Array.isArray(attachments) || attachments.length === 0) {
+    return normalizedText;
+  }
+
+  const attachmentLines = attachments
+    .map((item, index) => `${index + 1}. ${item.name}${item.size ? ` (${item.size})` : ''}`)
+    .join('\n');
+
+  if (!normalizedText) {
+    return `Attachments:\n${attachmentLines}`;
+  }
+
+  return `${normalizedText}\n\nAttachments:\n${attachmentLines}`;
+}
+
+function formatUserMarkdownContent(content) {
+  const text = String(content ?? '');
+  const maxRunLength = (value, ch) => {
+    const pattern = new RegExp(`${ch}+`, 'g');
+    let max = 0;
+    let match = pattern.exec(value);
+    while (match) {
+      if (match[0].length > max) {
+        max = match[0].length;
+      }
+      match = pattern.exec(value);
+    }
+    return max;
+  };
+  const maxBackticks = maxRunLength(text, '`');
+  const maxTildes = maxRunLength(text, '~');
+  const useBackticks = maxBackticks <= maxTildes;
+  const fenceChar = useBackticks ? '`' : '~';
+  const fenceLen = Math.max(3, (useBackticks ? maxBackticks : maxTildes) + 1);
+  const fence = fenceChar.repeat(fenceLen);
+  return `${fence}text\n${text}\n${fence}`;
+}
+
 /**
  * Convert chat data to Markdown format
  * @param {Object} data - The chat data to convert
@@ -805,10 +1287,15 @@ function convertToMarkdown(data) {
 
     // Process the content with special handling for code blocks
     if (msg.role === 'assistant') {
-      const formattedContent = domToMarkdown(msg.content);
-      markdown += `${formattedContent}\n\n`;
+      const assistantData = assistantElementToMarkdown(msg.content);
+      markdown += `${assistantData.content}\n\n`;
+      if (assistantData.references.length > 0) {
+        markdown += `<details>\n<summary>References</summary>\n\n`;
+        markdown += `${referencesToMarkdown(assistantData.references)}\n\n`;
+        markdown += `</details>\n\n`;
+      }
     } else {
-      markdown += `${msg.content}\n\n`;
+      markdown += `${formatUserMarkdownContent(msg.content)}\n\n`;
     }
 
     // Add separator between messages
@@ -844,7 +1331,15 @@ function convertToPlainText(data) {
       text += `${extractParagraphs(msg.chain_of_thought)}\n\n`;
     }
 
-    text += msg.role === 'user' ? `${msg.content}\n\n` : `${domToMarkdown(msg.content)}\n\n`;
+    if (msg.role === 'user') {
+      text += `${msg.content}\n\n`;
+    } else {
+      const assistantData = assistantElementToMarkdown(msg.content);
+      text += `${assistantData.content}\n\n`;
+      if (assistantData.references.length > 0) {
+        text += `References:\n${referencesToPlainText(assistantData.references)}\n\n`;
+      }
+    }
 
     // Add separator between messages
     if (index < data.messages.length - 1) {
@@ -889,7 +1384,7 @@ function extractAllMessagesFromPage() {
     const cotContainers = document.querySelectorAll('.ds-message .ds-think-content');
 
     // 4. 查找对话标题
-    const conversationTitle = document.querySelector('.f8d1e4c0');
+    const conversationTitle = getConversationTitle();
 
     if (userQuestions.length === 0 && aiResponses.length === 0 && cotContainers.length === 0) {
       return { };
@@ -936,12 +1431,17 @@ function extractAllMessagesFromPage() {
     allElements.forEach((item, index) => {
       const { element, type } = item;
       if (type === 'user') {
+        const attachments = extractUserAttachments(element);
+        const content = formatUserContent(element.textContent.trim(), attachments);
         // 处理用户问题
         const message = {
           role: 'user',
-          content: element.textContent.trim(),
+          content,
           element_id: element.id || `user-${index}-${Date.now()}`
         };
+        if (attachments.length > 0) {
+          message.attachments = attachments;
+        }
         messages.push(message);
       }
       else if (type === 'ai') {
@@ -961,7 +1461,7 @@ function extractAllMessagesFromPage() {
         cot = element;
       }
     });
-    return { title: conversationTitle.textContent.trim(), messages };
+    return { title: conversationTitle, messages };
   } catch (error) {
     console.error('Error extracting messages from page:', error);
     return { };
@@ -1010,16 +1510,154 @@ function cleanCodeBlockDOM(domElement) {
     const banners = codeBlock.querySelectorAll('.md-code-block-banner-wrap');
     banners.forEach(banner => banner.remove());
 
-    // 删除svg元素
-    const svgs = codeBlock.querySelectorAll('svg');
-    svgs.forEach(svg => svg.remove());
-
     // 删除footer元素
     const footers = codeBlock.querySelectorAll('.md-code-block-footer');
     footers.forEach(footer => footer.remove());
+
+    const decorativeSvgs = codeBlock.querySelectorAll('svg._9bc997d, svg[class*="_9bc997d"]');
+    decorativeSvgs.forEach(svg => svg.remove());
   });
 
   return clonedDOM;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function extractCodeLanguageForHtml(codeBlock) {
+  if (!(codeBlock instanceof HTMLElement)) return '';
+  const fromCodeInfo = extractMarkdownCodeInfo(codeBlock);
+  if (fromCodeInfo && fromCodeInfo.language) {
+    return String(fromCodeInfo.language).trim().toLowerCase();
+  }
+
+  const candidates = [
+    codeBlock.querySelector('pre code'),
+    codeBlock.querySelector('code'),
+    codeBlock.querySelector('pre')
+  ].filter(Boolean);
+
+  for (const node of candidates) {
+    const dataLang = (node.getAttribute('data-language') || '').trim();
+    if (dataLang) return dataLang.toLowerCase();
+    const className = node.className || '';
+    const match = className.match(/(?:^|\s)(?:language|lang)-([a-z0-9_+#.-]+)/i);
+    if (match && match[1]) {
+      return match[1].toLowerCase();
+    }
+  }
+
+  return '';
+}
+
+function appendCodeLanguageBadge(codeBlock, language) {
+  if (!language) return;
+  if (codeBlock.querySelector('[data-export-language-badge="1"]')) return;
+  const pre = codeBlock.querySelector('pre');
+  if (!pre || !pre.parentNode) return;
+  const badge = codeBlock.ownerDocument.createElement('span');
+  badge.className = 'language-header';
+  badge.setAttribute('data-export-language-badge', '1');
+  badge.textContent = String(language).trim().toLowerCase();
+  pre.parentNode.insertBefore(badge, pre);
+}
+
+let exportCopyTargetId = 0;
+
+function ensureCopyTargetId(pre) {
+  if (!pre) return '';
+  if (!pre.id) {
+    exportCopyTargetId += 1;
+    pre.id = `export-code-${exportCopyTargetId}`;
+  }
+  return pre.id;
+}
+
+function appendCopyButtonNearPre(pre) {
+  if (!pre || !pre.parentNode) return;
+  const targetId = ensureCopyTargetId(pre);
+  if (!targetId) return;
+  let button = pre.parentNode.querySelector(`button[data-copy-target="${targetId}"]`);
+  if (!button) {
+    button = pre.ownerDocument.createElement('button');
+    button.type = 'button';
+    button.className = 'code-copy-btn';
+    button.setAttribute('data-copy-target', targetId);
+    pre.parentNode.insertBefore(button, pre);
+  }
+  button.textContent = 'Copy';
+}
+
+function assistantElementToHtml(domElement) {
+  const normalized = normalizeAssistantContent(domElement);
+  const sourceCodeBlocks = Array.from(normalized.element.querySelectorAll('.md-code-block'));
+  const htmlElement = cleanCodeBlockDOM(normalized.element);
+  const codeBlocks = Array.from(htmlElement.querySelectorAll('.md-code-block'));
+  codeBlocks.forEach((codeBlock, index) => {
+    const sourceCodeBlock = sourceCodeBlocks[index] || codeBlock;
+    const language = extractCodeLanguageForHtml(sourceCodeBlock);
+    appendCodeLanguageBadge(codeBlock, language);
+    appendCopyButtonNearPre(codeBlock.querySelector('pre'));
+
+    const hasMermaidSvg = !!codeBlock.querySelector('svg.mermaid-svg, .mermaid-svg');
+    const tabText = (codeBlock.querySelector('[role="tablist"]')?.textContent || '').trim();
+    const likelyDiagram = hasMermaidSvg || /图表|diagram|mermaid/i.test(tabText);
+    if (!likelyDiagram) return;
+
+    const codeInfo = extractMarkdownCodeInfo(sourceCodeBlock) || extractMarkdownCodeInfo(codeBlock);
+    if (!codeInfo || !codeInfo.content) return;
+
+    const sourceBlock = htmlElement.ownerDocument.createElement('details');
+    sourceBlock.className = 'diagram-code-panel';
+    const summary = htmlElement.ownerDocument.createElement('summary');
+    summary.textContent = 'Diagram Code';
+    const pre = htmlElement.ownerDocument.createElement('pre');
+    const code = htmlElement.ownerDocument.createElement('code');
+    if (codeInfo.language) {
+      code.className = `language-${codeInfo.language}`;
+    }
+    code.textContent = codeInfo.content;
+    pre.appendChild(code);
+    sourceBlock.appendChild(summary);
+    if (codeInfo.language) {
+      const badge = htmlElement.ownerDocument.createElement('span');
+      badge.className = 'language-header';
+      badge.setAttribute('data-export-language-badge', '1');
+      badge.textContent = String(codeInfo.language).trim().toLowerCase();
+      sourceBlock.appendChild(badge);
+    }
+    sourceBlock.appendChild(pre);
+    codeBlock.insertAdjacentElement('afterend', sourceBlock);
+    appendCopyButtonNearPre(pre);
+  });
+  const htmlBody = htmlElement.innerHTML;
+
+  const items = normalized.references.map((item, index) => {
+    const label = escapeHtml((item.label || '').trim());
+    const href = escapeHtml((item.href || '').trim());
+    if (href && label) {
+      return `<li><a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a></li>`;
+    }
+    if (href) {
+      return `<li><a href="${href}" target="_blank" rel="noopener noreferrer">${href}</a></li>`;
+    }
+    if (label) {
+      return `<li>${label}</li>`;
+    }
+    return `<li>[${index + 1}]</li>`;
+  }).join('');
+
+  return {
+    content_html: htmlBody,
+    references_html: items ? `<ol>${items}</ol>` : '',
+    references: normalized.references
+  };
 }
 
 /**
@@ -1028,13 +1666,18 @@ function cleanCodeBlockDOM(domElement) {
  * @returns {string} - The HTML content
  */
 function convertToHTML(data) {
+  const safeTitle = escapeHtml(data.title);
+  const safeUrl = escapeHtml(data.url);
+  const safeDate = escapeHtml(new Date(data.date).toLocaleString());
+
   // 创建基本的HTML结构
   let html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${data.title}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <title>${safeTitle}</title>
   <style>
     :root {
       --primary-bg: #ffffff;
@@ -1224,11 +1867,39 @@ function convertToHTML(data) {
     }
 
     .language-header {
-      font-size: 12px;
-      color: #888;
-      margin-bottom: 8px;
+      display: inline-block;
+      font-size: .78rem;
+      color: #475569;
+      margin-right: .4rem;
+      margin-bottom: .35rem;
+      background: #e2e8f0;
+      padding: .15rem .45rem;
+      border-radius: 999px;
       font-weight: 600;
       text-transform: uppercase;
+      vertical-align: middle;
+    }
+
+    .code-copy-btn {
+      display: inline-flex;
+      align-items: center;
+      vertical-align: middle;
+      margin-bottom: .35rem;
+      padding: .15rem .55rem;
+      border-radius: 999px;
+      border: 1px solid #e5e7eb;
+      background: #f3f4f6;
+      color: #374151;
+      font-size: .75rem;
+      font-weight: 600;
+      line-height: 1.3;
+      cursor: pointer;
+      transition: background-color .15s ease, color .15s ease;
+    }
+
+    .code-copy-btn:hover {
+      background: #e5e7eb;
+      color: #111827;
     }
 
     h1, h2, h3, h4, h5, h6 {
@@ -1288,6 +1959,53 @@ function convertToHTML(data) {
       border-radius: 6px;
     }
 
+    .references ol {
+      margin: 0;
+      padding-left: 22px;
+    }
+
+    .references li {
+      margin: 4px 0;
+    }
+
+    .reference-panel {
+      margin-top: 15px;
+    }
+
+    .reference-panel details {
+      background-color: var(--secondary-bg);
+      border-radius: 8px;
+      border-left: 3px solid var(--border-color);
+      overflow: hidden;
+    }
+
+    .reference-panel summary {
+      padding: 12px 15px;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--text-secondary);
+      user-select: none;
+    }
+
+    .reference-panel-content {
+      padding: 12px 15px;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .diagram-code-panel {
+      margin-top: 10px;
+      border-top: 1px dashed var(--border-color);
+      padding-top: 8px;
+    }
+
+    .diagram-code-panel summary {
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-weight: 600;
+      margin-bottom: 8px;
+      user-select: none;
+    }
+
     .katex .katex-mathml {
       clip: rect(1px, 1px, 1px, 1px);
       border: 0;
@@ -1297,13 +2015,23 @@ function convertToHTML(data) {
       position: absolute;
       overflow: hidden;
     }
+
+    .katex-display {
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 2px 0;
+    }
+
+    .katex {
+      text-rendering: auto;
+    }
   </style>
 </head>
 <body>
   <div class="chat-header">
-    <div class="chat-title">${data.title}</div>
-    <div class="chat-metadata">URL: ${data.url}</div>
-    <div class="chat-metadata">Date: ${new Date(data.date).toLocaleString()}</div>
+    <div class="chat-title">${safeTitle}</div>
+    <div class="chat-metadata">URL: ${safeUrl}</div>
+    <div class="chat-metadata">Date: ${safeDate}</div>
   </div>
 `;
 
@@ -1315,8 +2043,22 @@ function convertToHTML(data) {
 
     // 处理消息内容，如果是 Markdown 格式，转换为 HTML
     let processedContent = msg.content;
+    let referencesPanel = '';
     if (msg.role === 'assistant') {
-      processedContent = cleanCodeBlockDOM(msg.content).innerHTML;
+      const assistantHtmlData = assistantElementToHtml(msg.content);
+      processedContent = assistantHtmlData.content_html;
+      if (assistantHtmlData.references_html) {
+        referencesPanel = `    <div class="reference-panel">
+      <details>
+        <summary>References</summary>
+        <div class="reference-panel-content references">
+          ${assistantHtmlData.references_html}
+        </div>
+      </details>
+    </div>`;
+      }
+    } else {
+      processedContent = escapeHtml(msg.content).replace(/\n/g, '<br>');
     }
 
     html += `  <div class="message-container ${roleClass}">
@@ -1340,11 +2082,55 @@ function convertToHTML(data) {
     html += `    <div class="message-content">
       ${processedContent}
     </div>
+${referencesPanel}
   </div>\n`;
   });
 
   // 关闭HTML结构
-  html += `</body>
+  html += `<script>
+  (function () {
+    function fallbackCopy(text) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      try {
+        document.execCommand('copy');
+      } catch (e) {}
+      document.body.removeChild(textarea);
+    }
+
+    async function copyText(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+          await navigator.clipboard.writeText(text);
+          return;
+        } catch (e) {}
+      }
+      fallbackCopy(text);
+    }
+
+    document.addEventListener('click', async function (event) {
+      const button = event.target.closest('.code-copy-btn');
+      if (!button) return;
+      const targetId = button.getAttribute('data-copy-target');
+      if (!targetId) return;
+      const target = document.getElementById(targetId);
+      if (!target) return;
+      const text = target.textContent || '';
+      await copyText(text);
+      const oldText = button.textContent;
+      button.textContent = 'Copied';
+      setTimeout(function () {
+        button.textContent = oldText || 'Copy';
+      }, 1200);
+    });
+  })();
+  </script>
+</body>
 </html>`;
 
   return html;
@@ -1358,16 +2144,22 @@ function convertToHTML(data) {
 function convertToJSON(formattedData) {
   const messages = formattedData.messages.map(msg => {
     if (msg.role === 'assistant') {
+      const assistantContent = assistantElementToMarkdown(msg.content);
       return {
         role: msg.role,
-        content: domToMarkdown(msg.content),
+        content: assistantContent.content,
+        references: assistantContent.references,
         chain_of_thought: extractParagraphs(msg.chain_of_thought),
       };
     }
-    return {
+    const userMessage = {
       role: msg.role,
-      content: domToMarkdown(msg.content),
+      content: String(msg.content ?? ''),
+    };
+    if (Array.isArray(msg.attachments) && msg.attachments.length > 0) {
+      userMessage.attachments = msg.attachments;
     }
+    return userMessage;
   })
   return {
     title: formattedData.title,
