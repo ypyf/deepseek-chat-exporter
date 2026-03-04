@@ -897,6 +897,64 @@ function domToMarkdown(domElement) {
     return texToMarkdown(annotations, domElement);
   }
 
+  const isWordLikeChar = (char) => /[0-9A-Za-z\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(char);
+
+  const getNeighborInfo = (element, direction) => {
+    let sibling = direction === 'left' ? element.previousSibling : element.nextSibling;
+    while (sibling) {
+      if (sibling.nodeType === Node.TEXT_NODE) {
+        const raw = String(sibling.textContent || '');
+        if (!raw) {
+          sibling = direction === 'left' ? sibling.previousSibling : sibling.nextSibling;
+          continue;
+        }
+        const normalized = raw.replace(/\u00A0/g, ' ');
+        const trimmed = normalized.trim();
+        if (!trimmed) {
+          sibling = direction === 'left' ? sibling.previousSibling : sibling.nextSibling;
+          continue;
+        }
+        const hasBoundarySpace = direction === 'left' ? /\s$/.test(normalized) : /^\s/.test(normalized);
+        const char = direction === 'left' ? trimmed.charAt(trimmed.length - 1) : trimmed.charAt(0);
+        return { char, hasBoundarySpace, nodeType: Node.TEXT_NODE, tagName: '' };
+      }
+      if (sibling.nodeType === Node.ELEMENT_NODE) {
+        const text = String(sibling.textContent || '').replace(/\u00A0/g, ' ').trim();
+        if (!text) {
+          sibling = direction === 'left' ? sibling.previousSibling : sibling.nextSibling;
+          continue;
+        }
+        const char = direction === 'left' ? text.charAt(text.length - 1) : text.charAt(0);
+        const tagName = String(sibling.nodeName || '').toLowerCase();
+        return { char, hasBoundarySpace: false, nodeType: Node.ELEMENT_NODE, tagName };
+      }
+      sibling = direction === 'left' ? sibling.previousSibling : sibling.nextSibling;
+    }
+    return { char: '', hasBoundarySpace: false, nodeType: null, tagName: '' };
+  };
+
+  const wrapInlineWithBoundarySpaces = (element, marker, rawText) => {
+    const text = String(rawText || '').trim();
+    if (!text) return '';
+    const left = getNeighborInfo(element, 'left');
+    const right = getNeighborInfo(element, 'right');
+    const first = text.charAt(0);
+    const last = text.charAt(text.length - 1);
+    const leftBoundaryLike = isWordLikeChar(first) || /^[([{<（【《「『“‘]/.test(first);
+    const rightBoundaryLike = isWordLikeChar(last) || /[)\]}>）】》」』”’'"`]/.test(last);
+    const rightWillHandleBoundary =
+      right.nodeType === Node.ELEMENT_NODE &&
+      /^(strong|b|em|i)$/.test(right.tagName);
+    const needsRightSpace =
+      !rightWillHandleBoundary &&
+      !right.hasBoundarySpace &&
+      right.char &&
+      rightBoundaryLike &&
+      isWordLikeChar(right.char);
+    const normalizedNeedsLeftSpace = !left.hasBoundarySpace && left.char && isWordLikeChar(left.char) && leftBoundaryLike;
+    return `${normalizedNeedsLeftSpace ? ' ' : ''}${marker}${text}${marker}${needsRightSpace ? ' ' : ''}`;
+  };
+
   // 处理各种元素类型
   switch (domElement.nodeName.toLowerCase()) {
     case 'h1':
@@ -980,7 +1038,17 @@ function domToMarkdown(domElement) {
           content += child.textContent;
         }
       }
-      return `> ${content.trim()}\n\n`;
+      const normalized = content
+        .replace(/\r\n?/g, '\n')
+        .trim();
+      if (!normalized) {
+        return '> \n\n';
+      }
+      const quoted = normalized
+        .split('\n')
+        .map(line => `> ${line}`)
+        .join('\n');
+      return `${quoted}\n\n`;
     }
     case 'a': {
       let content = '';
@@ -1003,8 +1071,7 @@ function domToMarkdown(domElement) {
           content += child.textContent;
         }
       }
-      const text = content.trim();
-      return `**${text}**`;
+      return wrapInlineWithBoundarySpaces(domElement, '**', content);
     }
     case 'em':
     case 'i': {
@@ -1016,7 +1083,7 @@ function domToMarkdown(domElement) {
           content += child.textContent;
         }
       }
-      return `*${content.trim()}*`;
+      return wrapInlineWithBoundarySpaces(domElement, '*', content);
     }
     case 'code': {
       if (!domElement.closest('.md-code-block')) {
