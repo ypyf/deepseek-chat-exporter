@@ -1,6 +1,6 @@
 {
     "extName": {
-        "message": "DeepSeek 聊天对话导出器",
+        "message": "DeepSeek 聊天导出 – 支持 Markdown、JSON、HTML 等多种格式",
         "description": "The name of the extension"
     },
     "extDescription": {

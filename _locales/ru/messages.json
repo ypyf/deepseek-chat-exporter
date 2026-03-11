@@ -1,6 +1,6 @@
 {
     "extName": {
-        "message": "Экспортер диалогов чата DeepSeek",
+        "message": "Экспорт чатов DeepSeek – Markdown, JSON, HTML и другие форматы",
         "description": "The name of the extension"
     },
     "extDescription": {
