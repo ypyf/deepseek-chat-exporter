@@ -90,5 +90,13 @@
     "usageTipContent": {
         "message": "在DeepSeek聊天页面右上角点击\"导出聊天\"按钮，选择您需要的格式即可导出当前对话。",
         "description": "Content for the usage tip"
+    },
+    "settingMarkdownReferencesLabel": {
+        "message": "导出搜索引用（网页链接）",
+        "description": "Label for markdown references export toggle"
+    },
+    "settingMarkdownReferencesDesc": {
+        "message": "开启后，Markdown 会包含搜索到的网页链接和引用标记。",
+        "description": "Description for markdown references export toggle"
     }
 }

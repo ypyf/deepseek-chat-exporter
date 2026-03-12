@@ -90,5 +90,13 @@
     "usageTipContent": {
         "message": " Click the \"Export Chat\" button in the top-right corner of the DeepSeek chat page and select your desired format to export the current conversation.",
         "description": "Content for the usage tip"
+    },
+    "settingMarkdownReferencesLabel": {
+        "message": "Include web references in export",
+        "description": "Label for markdown references export toggle"
+    },
+    "settingMarkdownReferencesDesc": {
+        "message": "When enabled, export searched web links and citation markers.",
+        "description": "Description for markdown references export toggle"
     }
 }

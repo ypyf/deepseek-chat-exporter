@@ -11,10 +11,15 @@
  */
 function isDeepSeekChatPage() {
   const url = window.location.href;
-  // 检查域名
   const domain = new URL(url).hostname;
   return domain === 'chat.deepseek.com';
 }
+
+const SETTINGS_DEFAULTS = {
+  autoExport: false,
+  notifyNewMessages: true,
+  exportWebReferences: false
+};
 
 /**
  * Initialize the extension
@@ -250,26 +255,44 @@ async function exportChat(format) {
   try {
     await waitForDiagramBlocksReady();
     await prepareDiagramCodeBlocks();
+    const settings = await getSettings();
     const {title, messages} = extractAllMessagesFromPage();
     if (!Array.isArray(messages) || messages.length === 0) {
       alert(chrome.i18n.getMessage('noMessagesFound'));
       return;
     }
 
-    // 准备导出数据
     const exportData = {
-      // TODO 提取标题信息
       title: title,
       url: window.location.href,
       date: new Date().toISOString(),
       messages: messages
     };
-    // 使用导出函数下载聊天数据
-    downloadChat(exportData, format);
+    downloadChat(exportData, format, settings);
   } catch (error) {
     console.error('Error during export:', error);
     alert(chrome.i18n.getMessage('exportError'));
   }
+}
+
+function getSettings() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(['settings'], (result) => {
+      const settings = result && result.settings ? result.settings : {};
+      const exportWebReferences = typeof settings.exportWebReferences === 'boolean'
+        ? settings.exportWebReferences
+        : !!settings.exportMarkdownReferences;
+      resolve({
+        ...SETTINGS_DEFAULTS,
+        ...settings,
+        exportWebReferences
+      });
+    });
+  });
+}
+
+function removeReferenceMarkers(text) {
+  return String(text ?? '').replace(/\[\^\d+\]/g, '');
 }
 
 function waitForBlockCodeReady(block, timeoutMs = 2500) {
@@ -451,10 +474,8 @@ function waitForDiagramBlocksReady(timeoutMs = 10000) {
  * @param {Object} exportData - The data to export
  * @param {string} format - The format to export ('json', 'markdown', 'text', or 'html')
  */
-function downloadChat(exportData, format) {
+function downloadChat(exportData, format, settings) {
   try {
-    // 格式化导出数据，确保包含用户问题、AI回答和思考过程
-    // 注意：保持原始消息数组的顺序不变
     const formattedData = {
       title: exportData.title,
       url: exportData.url,
@@ -480,40 +501,36 @@ function downloadChat(exportData, format) {
       ? sanitizeFilename(rawTitle)
       : rawTitle.replace(/[/\\?%*:|"<>]/g, '-');
 
-    // 根据格式处理导出
     if (format === 'markdown') {
-      const markdownContent = convertToMarkdown(formattedData);
+      const markdownContent = convertToMarkdown(formattedData, settings);
       blob = new Blob([markdownContent], { type: 'text/markdown' });
       contentType = 'text/markdown';
       filename = `${safeTitle}.md`;
     } else if (format === 'text') {
-      const textContent = convertToPlainText(formattedData);
+      const textContent = convertToPlainText(formattedData, settings);
       blob = new Blob([textContent], { type: 'text/plain' });
       contentType = 'text/plain';
       filename = `${safeTitle}.txt`;
     } else if (format === 'html') {
-      const htmlContent = convertToHTML(formattedData);
+      const htmlContent = convertToHTML(formattedData, settings);
       blob = new Blob([htmlContent], { type: 'text/html' });
       contentType = 'text/html';
       filename = `${safeTitle}.html`;
     } else {
-      const jsonContent = convertToJSON(formattedData);
+      const jsonContent = convertToJSON(formattedData, settings);
       blob = new Blob([JSON.stringify(jsonContent, null, 2)], { type: 'application/json' });
       contentType = 'application/json';
       filename = `${safeTitle}.json`;
     }
 
-    // 创建并下载文件
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
     a.click();
 
-    // 清理
     setTimeout(() => URL.revokeObjectURL(url), 50);
 
-    // 添加视觉反馈
     const exportButton = document.getElementById('deepseek-export-btn');
     if (exportButton) {
       exportButton.classList.add('pulse');
@@ -1177,7 +1194,7 @@ function normalizeAssistantContent(domElement) {
     const label = buildReferenceLabel(link);
     const index = ensureReference(href, label);
 
-    const marker = cloned.ownerDocument.createTextNode(`[${index}]`);
+    const marker = cloned.ownerDocument.createTextNode(`[^${index}]`);
     link.replaceWith(marker);
   });
 
@@ -1187,7 +1204,7 @@ function normalizeAssistantContent(domElement) {
     const label = buildReferenceLabel(source);
     if (!label) return;
     const index = ensureReference('', label);
-    const marker = cloned.ownerDocument.createTextNode(`[${index}]`);
+    const marker = cloned.ownerDocument.createTextNode(`[^${index}]`);
     source.replaceWith(marker);
   });
 
@@ -1206,18 +1223,21 @@ function assistantElementToMarkdown(domElement) {
   };
 }
 
-function referencesToMarkdown(referenceItems) {
+function referencesToMarkdown(referenceItems, referenceIds) {
   if (!Array.isArray(referenceItems) || referenceItems.length === 0) {
     return '';
   }
   return referenceItems
     .map((item, index) => {
+      const refId = Array.isArray(referenceIds) && referenceIds[index]
+        ? String(referenceIds[index]).trim()
+        : String(index + 1);
       const href = (item && item.href ? item.href : '').trim();
-      const label = (item && item.label ? item.label : '').replace(/\]/g, '\\]').trim();
-      if (label && href) return `${index + 1}. [${label}](${href})`;
-      if (href) return `${index + 1}. [${href}](${href})`;
-      if (label) return `${index + 1}. ${label}`;
-      return `${index + 1}.`;
+      const label = (item && item.label ? item.label : '').trim();
+      if (label && href) return `[^${refId}]: [${label}](${href})`;
+      if (href) return `[^${refId}]: ${href}`;
+      if (label) return `[^${refId}]: ${label}`;
+      return `[^${refId}]: `;
     })
     .join('\n');
 }
@@ -1236,6 +1256,53 @@ function referencesToPlainText(referenceItems) {
       return `${index + 1}.`;
     })
     .join('\n');
+}
+
+function renderHtmlReferenceSuperscripts(contentHtml, referenceItems, referencePrefix) {
+  if (!contentHtml) return '';
+  return String(contentHtml).replace(/\[\^(\d+)\]/g, (match, value) => {
+    const localIndex = Number(value);
+    if (!Number.isInteger(localIndex) || localIndex < 1) return match;
+    const item = Array.isArray(referenceItems) ? referenceItems[localIndex - 1] : null;
+    if (!item) return match;
+    const label = escapeHtml((item.label || item.href || '').trim());
+    const href = (item.href || '').trim();
+    const titleAttr = label ? ` title="${label}"` : '';
+    if (href) {
+      const safeHref = escapeHtml(href);
+      return `<sup class="reference-sup"><a href="${safeHref}" target="_blank" rel="noopener noreferrer"${titleAttr}>[${localIndex}]</a></sup>`;
+    }
+    const targetId = `${referencePrefix}-ref-${localIndex}`;
+    return `<sup class="reference-sup"><a href="#${targetId}"${titleAttr}>[${localIndex}]</a></sup>`;
+  });
+}
+
+function buildHtmlReferencesPanel(referenceItems, referencePrefix) {
+  if (!Array.isArray(referenceItems) || referenceItems.length === 0) return '';
+  const items = referenceItems.map((item, index) => {
+    const refNumber = index + 1;
+    const refId = `${referencePrefix}-ref-${refNumber}`;
+    const label = escapeHtml((item.label || '').trim());
+    const href = escapeHtml((item.href || '').trim());
+    if (href && label) {
+      return `<li id="${refId}"><a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a></li>`;
+    }
+    if (href) {
+      return `<li id="${refId}"><a href="${href}" target="_blank" rel="noopener noreferrer">${href}</a></li>`;
+    }
+    if (label) {
+      return `<li id="${refId}">${label}</li>`;
+    }
+    return `<li id="${refId}">[${refNumber}]</li>`;
+  }).join('');
+  return `    <div class="reference-panel">
+      <details>
+        <summary>References</summary>
+        <div class="reference-panel-content references">
+          <ol>${items}</ol>
+        </div>
+      </details>
+    </div>`;
 }
 
 function getDefaultConversationTitle() {
@@ -1331,41 +1398,51 @@ function formatUserMarkdownContent(content) {
  * @param {Object} data - The chat data to convert
  * @returns {string} - The Markdown content
  */
-function convertToMarkdown(data) {
-  // Create the header with metadata
+function convertToMarkdown(data, settings) {
+  const includeReferences = !!(settings && settings.exportWebReferences);
   let markdown = `# ${data.title}\n\n`;
   markdown += `- **URL**: ${data.url}\n`;
   markdown += `- **Date**: ${new Date(data.date).toLocaleString()}\n\n`;
   markdown += `---\n\n`;
-
-  // Process each message
+  let globalReferenceCounter = 0;
   data.messages.forEach((msg, index) => {
-    // Format the role header
     const roleIcon = msg.role === 'user' ? '🧑' : '🤖';
     const roleName = msg.role === 'user' ? 'User' : 'DeepSeek AI';
     markdown += `## ${roleIcon} ${roleName}\n\n`;
 
-    // Add chain of thought first (before content) to match DeepSeek website
     if (msg.role === 'assistant' && msg.chain_of_thought) {
-      markdown += `<details>\n<summary>Chain of Thought</summary>\n\n`;
+      markdown += `### Chain of Thought\n\n`;
       markdown += `${extractParagraphs(msg.chain_of_thought)}\n\n`;
-      markdown += `</details>\n\n`;
     }
 
-    // Process the content with special handling for code blocks
     if (msg.role === 'assistant') {
       const assistantData = assistantElementToMarkdown(msg.content);
-      markdown += `${assistantData.content}\n\n`;
+      let assistantContent = assistantData.content;
       if (assistantData.references.length > 0) {
-        markdown += `<details>\n<summary>References</summary>\n\n`;
-        markdown += `${referencesToMarkdown(assistantData.references)}\n\n`;
-        markdown += `</details>\n\n`;
+        if (includeReferences) {
+          const referenceIds = assistantData.references.map(() => {
+            globalReferenceCounter += 1;
+            return globalReferenceCounter;
+          });
+          assistantContent = assistantContent.replace(/\[\^(\d+)\]/g, (match, localIndex) => {
+            const mappedId = referenceIds[Number(localIndex) - 1];
+            return mappedId ? `[^${mappedId}]` : match;
+          });
+          assistantContent = assistantContent.replace(/(\[\^\d+\])(?=\[\^\d+\])/g, '$1 ');
+          markdown += `${assistantContent}\n\n`;
+          markdown += `### References\n\n`;
+          markdown += `${referencesToMarkdown(assistantData.references, referenceIds)}\n\n`;
+        } else {
+          assistantContent = removeReferenceMarkers(assistantContent);
+          markdown += `${assistantContent}\n\n`;
+        }
+      } else {
+        markdown += `${assistantContent}\n\n`;
       }
     } else {
       markdown += `${formatUserMarkdownContent(msg.content)}\n\n`;
     }
 
-    // Add separator between messages
     if (index < data.messages.length - 1) {
       markdown += `---\n\n`;
     }
@@ -1379,7 +1456,8 @@ function convertToMarkdown(data) {
  * @param {Object} data - The chat data to convert
  * @returns {string} - The plain text content
  */
-function convertToPlainText(data) {
+function convertToPlainText(data, settings) {
+  const includeReferences = !!(settings && settings.exportWebReferences);
   // Create the header with metadata
   let text = `${data.title}\n\n`;
   text += `URL: ${data.url}\n`;
@@ -1402,8 +1480,11 @@ function convertToPlainText(data) {
       text += `${msg.content}\n\n`;
     } else {
       const assistantData = assistantElementToMarkdown(msg.content);
-      text += `${assistantData.content}\n\n`;
-      if (assistantData.references.length > 0) {
+      const assistantContent = includeReferences
+        ? assistantData.content
+        : removeReferenceMarkers(assistantData.content);
+      text += `${assistantContent}\n\n`;
+      if (includeReferences && assistantData.references.length > 0) {
         text += `References:\n${referencesToPlainText(assistantData.references)}\n\n`;
       }
     }
@@ -1732,7 +1813,8 @@ function assistantElementToHtml(domElement) {
  * @param {Object} data - The chat data to convert
  * @returns {string} - The HTML content
  */
-function convertToHTML(data) {
+function convertToHTML(data, settings) {
+  const includeReferences = !!(settings && settings.exportWebReferences);
   const safeTitle = escapeHtml(data.title);
   const safeUrl = escapeHtml(data.url);
   const safeDate = escapeHtml(new Date(data.date).toLocaleString());
@@ -1990,6 +2072,18 @@ function convertToHTML(data) {
       text-decoration: underline;
     }
 
+    .reference-sup {
+      margin-left: 1px;
+      margin-right: 1px;
+    }
+
+    .reference-sup a {
+      font-size: 0.78em;
+      vertical-align: super;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
     ul, ol {
       padding-left: 2em;
     }
@@ -2103,7 +2197,7 @@ function convertToHTML(data) {
 `;
 
   // 处理每条消息
-  data.messages.forEach(msg => {
+  data.messages.forEach((msg, msgIndex) => {
     const roleClass = msg.role === 'user' ? 'user-message' : 'ai-message';
     const roleIcon = msg.role === 'user' ? '🧑' : '🤖';
     const roleName = msg.role === 'user' ? 'User' : 'DeepSeek AI';
@@ -2113,16 +2207,16 @@ function convertToHTML(data) {
     let referencesPanel = '';
     if (msg.role === 'assistant') {
       const assistantHtmlData = assistantElementToHtml(msg.content);
-      processedContent = assistantHtmlData.content_html;
-      if (assistantHtmlData.references_html) {
-        referencesPanel = `    <div class="reference-panel">
-      <details>
-        <summary>References</summary>
-        <div class="reference-panel-content references">
-          ${assistantHtmlData.references_html}
-        </div>
-      </details>
-    </div>`;
+      const referencePrefix = `msg-${msgIndex + 1}`;
+      if (includeReferences) {
+        processedContent = renderHtmlReferenceSuperscripts(
+          assistantHtmlData.content_html,
+          assistantHtmlData.references,
+          referencePrefix
+        );
+        referencesPanel = buildHtmlReferencesPanel(assistantHtmlData.references, referencePrefix);
+      } else {
+        processedContent = removeReferenceMarkers(assistantHtmlData.content_html);
       }
     } else {
       processedContent = escapeHtml(msg.content).replace(/\n/g, '<br>');
@@ -2208,14 +2302,15 @@ ${referencesPanel}
  * @param {Object} data - The formatted data to convert
  * @returns {Object} - The JSON-ready data
  */
-function convertToJSON(formattedData) {
+function convertToJSON(formattedData, settings) {
+  const includeReferences = !!(settings && settings.exportWebReferences);
   const messages = formattedData.messages.map(msg => {
     if (msg.role === 'assistant') {
       const assistantContent = assistantElementToMarkdown(msg.content);
       return {
         role: msg.role,
-        content: assistantContent.content,
-        references: assistantContent.references,
+        content: includeReferences ? assistantContent.content : removeReferenceMarkers(assistantContent.content),
+        references: includeReferences ? assistantContent.references : [],
         chain_of_thought: extractParagraphs(msg.chain_of_thought),
       };
     }

@@ -9,12 +9,12 @@ chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
     console.log('DeepSeek Chat Exporter installed');
 
-    // Initialize storage
     chrome.storage.local.set({
       chatData: {},
       settings: {
         autoExport: false,
-        notifyNewMessages: true
+        notifyNewMessages: true,
+        exportWebReferences: false
       }
     });
   }

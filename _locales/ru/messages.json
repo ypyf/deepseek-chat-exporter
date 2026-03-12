@@ -90,5 +90,13 @@
     "usageTipContent": {
         "message": "Нажмите кнопку \"Экспорт чата\" в правом верхнем углу страницы чата DeepSeek и выберите нужный формат для экспорта текущего разговора.",
         "description": "Content for the usage tip"
+    },
+    "settingMarkdownReferencesLabel": {
+        "message": "Включать веб-ссылки и цитаты в экспорт",
+        "description": "Label for markdown references export toggle"
+    },
+    "settingMarkdownReferencesDesc": {
+        "message": "При включении экспортируются найденные веб-ссылки и метки цитирования.",
+        "description": "Description for markdown references export toggle"
     }
 }

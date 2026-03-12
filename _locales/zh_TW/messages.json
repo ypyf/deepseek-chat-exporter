@@ -90,5 +90,13 @@
     "usageTipContent": {
         "message": "在DeepSeek聊天頁面右上角點擊\"匯出聊天\"按鈕，選擇您需要的格式即可匯出當前對話。",
         "description": "Content for the usage tip"
+    },
+    "settingMarkdownReferencesLabel": {
+        "message": "匯出搜尋引用（網頁連結）",
+        "description": "Label for markdown references export toggle"
+    },
+    "settingMarkdownReferencesDesc": {
+        "message": "開啟後，Markdown 會包含搜尋到的網頁連結和引用標記。",
+        "description": "Description for markdown references export toggle"
     }
 }
