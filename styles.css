@@ -145,6 +145,64 @@
   }
 }
 
+/* Export loading overlay */
+#deepseek-export-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.deepseek-export-loading-box {
+  background: #fff;
+  border-radius: 14px;
+  padding: 28px 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  min-width: 220px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .deepseek-export-loading-box {
+    background: #1e1e2e;
+    color: #cdd6f4;
+  }
+}
+
+.deepseek-export-loading-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #e0e0e0;
+  border-top-color: #4285f4;
+  border-radius: 50%;
+  animation: deepseek-spin 0.8s linear infinite;
+}
+
+@keyframes deepseek-spin {
+  to { transform: rotate(360deg); }
+}
+
+.deepseek-export-loading-text {
+  font-size: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #333;
+  text-align: center;
+  line-height: 1.5;
+}
+
+@media (prefers-color-scheme: dark) {
+  .deepseek-export-loading-text {
+    color: #cdd6f4;
+  }
+}
+
 /* Mobile responsiveness */
 @media (max-width: 768px) {
   #deepseek-export-btn {

@@ -98,5 +98,13 @@
     "settingMarkdownReferencesDesc": {
         "message": "开启后，Markdown 会包含搜索到的网页链接和引用标记。",
         "description": "Description for markdown references export toggle"
+    },
+    "exportingScrolling": {
+        "message": "正在保存对话，请稍候…",
+        "description": "Loading overlay text while scrolling to reveal all messages"
+    },
+    "exportingProcessing": {
+        "message": "正在保存对话，即将完成…",
+        "description": "Loading overlay text while processing the export"
     }
 }

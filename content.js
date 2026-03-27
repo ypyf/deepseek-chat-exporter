@@ -248,15 +248,143 @@ function addExportStyles() {
 }
 
 /**
+ * Find the main scrollable container for the chat
+ * @returns {Element|null}
+ */
+function getChatScrollContainer() {
+  // Try known DeepSeek selectors first
+  const candidates = [
+    document.querySelector('.dad65929'),
+    document.querySelector('.e1f93b07'),
+    document.querySelector('[class*="chat"][class*="container"]'),
+    document.querySelector('[class*="conversation"]'),
+  ];
+  for (const el of candidates) {
+    if (el && el.scrollHeight > el.clientHeight) return el;
+  }
+  // Fallback: walk up from first message element
+  const firstMsg = document.querySelector('.ds-message');
+  if (firstMsg) {
+    let node = firstMsg.parentElement;
+    while (node && node !== document.body) {
+      const style = window.getComputedStyle(node);
+      if (
+        (style.overflowY === 'auto' || style.overflowY === 'scroll') &&
+        node.scrollHeight > node.clientHeight
+      ) {
+        return node;
+      }
+      node = node.parentElement;
+    }
+  }
+  // Last resort: body or documentElement
+  if (document.documentElement.scrollHeight > document.documentElement.clientHeight) {
+    return document.documentElement;
+  }
+  return document.body;
+}
+
+/**
+ * Scroll through the entire chat to force virtual-list rendering of all messages.
+ * Strategy: scroll to bottom first, then scroll back to top and stop there.
+ * This ensures the oldest messages (top) are in the DOM when we extract.
+ * @returns {Promise<void>}
+ */
+function scrollToRevealAll() {
+  return new Promise((resolve) => {
+    const container = getChatScrollContainer();
+    if (!container) {
+      resolve();
+      return;
+    }
+
+    const STEP_DELAY = 200;   // ms between scroll steps
+    const TOTAL_TIMEOUT = 20000; // max 20s
+    const startTime = Date.now();
+
+    // Phase 1: scroll to bottom to load recent messages
+    container.scrollTop = container.scrollHeight;
+
+    setTimeout(function scrollDown() {
+      if (Date.now() - startTime > TOTAL_TIMEOUT) {
+        // Timed out during scroll-down, still try scroll-up
+        scrollUpToTop();
+        return;
+      }
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      if (scrollTop + clientHeight >= scrollHeight - 10) {
+        // Reached bottom, now scroll back up
+        setTimeout(scrollUpToTop, 300);
+        return;
+      }
+      container.scrollTop = scrollTop + clientHeight * 0.8;
+      setTimeout(scrollDown, STEP_DELAY);
+    }, 300);
+
+    // Phase 2: scroll back to top so oldest messages are rendered
+    function scrollUpToTop() {
+      const upStart = Date.now();
+      function scrollUp() {
+        if (Date.now() - upStart > TOTAL_TIMEOUT) {
+          resolve();
+          return;
+        }
+        const { scrollTop, clientHeight } = container;
+        if (scrollTop <= 10) {
+          // Reached top - wait for render then resolve
+          setTimeout(resolve, 400);
+          return;
+        }
+        container.scrollTop = Math.max(0, scrollTop - clientHeight * 0.8);
+        setTimeout(scrollUp, STEP_DELAY);
+      }
+      scrollUp();
+    }
+  });
+}
+
+function showExportingOverlay(message) {
+  if (document.getElementById('deepseek-export-loading')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'deepseek-export-loading';
+  const box = document.createElement('div');
+  box.className = 'deepseek-export-loading-box';
+  const spinner = document.createElement('div');
+  spinner.className = 'deepseek-export-loading-spinner';
+  const text = document.createElement('div');
+  text.className = 'deepseek-export-loading-text';
+  text.id = 'deepseek-export-loading-text';
+  text.textContent = message || chrome.i18n.getMessage('exportingLoading') || 'Preparing export…';
+  box.appendChild(spinner);
+  box.appendChild(text);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+}
+
+function updateExportingOverlay(message) {
+  const el = document.getElementById('deepseek-export-loading-text');
+  if (el) el.textContent = message;
+}
+
+function hideExportingOverlay() {
+  const el = document.getElementById('deepseek-export-loading');
+  if (el) el.remove();
+}
+
+/**
  * Export the chat to a file in the specified format
  * @param {string} format - The format to export ('json', 'markdown', or 'text')
  */
 async function exportChat(format) {
+  showExportingOverlay(chrome.i18n.getMessage('exportingScrolling') || 'Loading all messages…');
   try {
+    await scrollToRevealAll();
+    updateExportingOverlay(chrome.i18n.getMessage('exportingProcessing') || 'Processing…');
     await waitForDiagramBlocksReady();
     await prepareDiagramCodeBlocks();
     const settings = await getSettings();
     const {title, messages} = extractAllMessagesFromPage();
+    hideExportingOverlay();
     if (!Array.isArray(messages) || messages.length === 0) {
       alert(chrome.i18n.getMessage('noMessagesFound'));
       return;
@@ -270,6 +398,7 @@ async function exportChat(format) {
     };
     downloadChat(exportData, format, settings);
   } catch (error) {
+    hideExportingOverlay();
     console.error('Error during export:', error);
     alert(chrome.i18n.getMessage('exportError'));
   }
@@ -1545,8 +1674,7 @@ function extractAllMessagesFromPage() {
     userQuestions.forEach(el => {
       allElements.push({
         element: el,
-        type: 'user',
-        position: getElementPosition(el)
+        type: 'user'
       });
     });
 
@@ -1554,8 +1682,7 @@ function extractAllMessagesFromPage() {
     aiResponses.forEach(el => {
       allElements.push({
         element: el,
-        type: 'ai',
-        position: getElementPosition(el)
+        type: 'ai'
       });
     });
 
@@ -1563,14 +1690,16 @@ function extractAllMessagesFromPage() {
     cotContainers.forEach(el => {
       allElements.push({
         element: el,
-        type: 'cot',
-        position: getElementPosition(el)
+        type: 'cot'
       });
     });
 
     // 按照元素在DOM中的位置排序
     allElements.sort((a, b) => {
-      return a.position - b.position;
+      const pos = a.element.compareDocumentPosition(b.element);
+      if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+      if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+      return 0;
     });
 
     // 处理排序后的元素
@@ -1614,34 +1743,6 @@ function extractAllMessagesFromPage() {
     console.error('Error extracting messages from page:', error);
     return { };
   }
-}
-
-/**
- * 获取元素在DOM中的位置
- * @param {Element} element - 要获取位置的元素
- * @returns {number} 元素的位置值
- */
-function getElementPosition(element) {
-  // 使用TreeWalker遍历DOM树，找到元素的位置
-  const treeWalker = document.createTreeWalker(
-    document.body,
-    NodeFilter.SHOW_ELEMENT,
-    null,
-    false
-  );
-
-  let position = 0;
-  let found = false;
-
-  while (treeWalker.nextNode()) {
-    position++;
-    if (treeWalker.currentNode === element) {
-      found = true;
-      break;
-    }
-  }
-
-  return found ? position : Number.MAX_SAFE_INTEGER;
 }
 
 function cleanCodeBlockDOM(domElement) {
