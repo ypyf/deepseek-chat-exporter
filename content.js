@@ -252,17 +252,16 @@ function addExportStyles() {
  * @returns {Element|null}
  */
 function getChatScrollContainer() {
-  // Try known DeepSeek selectors first
   const candidates = [
     document.querySelector('.dad65929'),
     document.querySelector('.e1f93b07'),
+    document.querySelector('main'),
     document.querySelector('[class*="chat"][class*="container"]'),
     document.querySelector('[class*="conversation"]'),
   ];
   for (const el of candidates) {
     if (el && el.scrollHeight > el.clientHeight) return el;
   }
-  // Fallback: walk up from first message element
   const firstMsg = document.querySelector('.ds-message');
   if (firstMsg) {
     let node = firstMsg.parentElement;
@@ -277,70 +276,243 @@ function getChatScrollContainer() {
       node = node.parentElement;
     }
   }
-  // Last resort: body or documentElement
+  const fallbackScrollables = Array.from(document.querySelectorAll('main, section, div')).filter((el) => {
+    if (!(el instanceof HTMLElement)) return false;
+    const style = window.getComputedStyle(el);
+    if (!/(auto|scroll|overlay)/.test(style.overflowY)) return false;
+    return el.scrollHeight > el.clientHeight + 80;
+  });
+  fallbackScrollables.sort((a, b) => {
+    const aScore = a.querySelectorAll('.ds-message, .fbb737a4, .ds-markdown').length;
+    const bScore = b.querySelectorAll('.ds-message, .fbb737a4, .ds-markdown').length;
+    if (bScore !== aScore) return bScore - aScore;
+    return (b.clientHeight * b.clientWidth) - (a.clientHeight * a.clientWidth);
+  });
+  if (fallbackScrollables[0]) {
+    return fallbackScrollables[0];
+  }
   if (document.documentElement.scrollHeight > document.documentElement.clientHeight) {
     return document.documentElement;
   }
   return document.body;
 }
 
-/**
- * Scroll through the entire chat to force virtual-list rendering of all messages.
- * Strategy: scroll to bottom first, then scroll back to top and stop there.
- * This ensures the oldest messages (top) are in the DOM when we extract.
- * @returns {Promise<void>}
- */
-function scrollToRevealAll() {
-  return new Promise((resolve) => {
-    const container = getChatScrollContainer();
-    if (!container) {
-      resolve();
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isDocumentScrollContainer(container) {
+  return container === document.body || container === document.documentElement;
+}
+
+function getContainerScrollTop(container) {
+  if (!container) return 0;
+  if (isDocumentScrollContainer(container)) {
+    return window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+  }
+  return container.scrollTop;
+}
+
+function getContainerClientHeight(container) {
+  if (!container) return 0;
+  if (isDocumentScrollContainer(container)) {
+    return window.innerHeight || document.documentElement.clientHeight || 0;
+  }
+  return container.clientHeight;
+}
+
+function getContainerScrollHeight(container) {
+  if (!container) return 0;
+  if (isDocumentScrollContainer(container)) {
+    return Math.max(
+      document.documentElement.scrollHeight || 0,
+      document.body.scrollHeight || 0
+    );
+  }
+  return container.scrollHeight;
+}
+
+function setContainerScrollTop(container, value) {
+  const nextValue = Math.max(0, Number(value) || 0);
+  if (isDocumentScrollContainer(container)) {
+    window.scrollTo(0, nextValue);
+    return;
+  }
+  container.scrollTop = nextValue;
+}
+
+async function waitForScrollSettle(container, previousTop, timeoutMs = 1500) {
+  const start = Date.now();
+  let stableTicks = 0;
+  let lastTop = getContainerScrollTop(container);
+  while (Date.now() - start < timeoutMs) {
+    await delay(120);
+    const currentTop = getContainerScrollTop(container);
+    const currentHeight = getContainerScrollHeight(container);
+    if (Math.abs(currentTop - lastTop) <= 1) {
+      stableTicks += 1;
+    } else {
+      stableTicks = 0;
+      lastTop = currentTop;
+    }
+    if (stableTicks >= 2 && Math.abs(currentTop - previousTop) > 1) {
+      break;
+    }
+    if (stableTicks >= 3 && currentHeight > 0) {
+      break;
+    }
+  }
+  await delay(150);
+}
+
+async function scrollToTopForCollection(container, timeoutMs = 30000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const currentTop = getContainerScrollTop(container);
+    if (currentTop <= 2) {
+      await delay(250);
       return;
     }
+    const step = Math.max(300, getContainerClientHeight(container) * 0.75);
+    setContainerScrollTop(container, Math.max(0, currentTop - step));
+    await waitForScrollSettle(container, currentTop);
+  }
+}
 
-    const STEP_DELAY = 200;   // ms between scroll steps
-    const TOTAL_TIMEOUT = 20000; // max 20s
-    const startTime = Date.now();
+function getMessageSignature(message) {
+  if (!message) return '';
+  const normalize = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
+  if (message.role === 'assistant') {
+    const contentText = message.content instanceof HTMLElement
+      ? normalize(message.content.textContent)
+      : normalize(message.content);
+    const cotText = message.chain_of_thought instanceof HTMLElement
+      ? normalize(message.chain_of_thought.textContent)
+      : normalize(message.chain_of_thought);
+    return `${message.role}::${contentText}::${cotText}`;
+  }
+  const attachmentText = Array.isArray(message.attachments)
+    ? message.attachments.map(item => `${item.name || ''}:${item.size || ''}:${item.type || ''}`).join('|')
+    : '';
+  return `${message.role}::${normalize(message.content)}::${attachmentText}`;
+}
 
-    // Phase 1: scroll to bottom to load recent messages
-    container.scrollTop = container.scrollHeight;
+function mergeMessageSnapshots(existingMessages, incomingMessages) {
+  const base = Array.isArray(existingMessages) ? existingMessages.slice() : [];
+  const next = Array.isArray(incomingMessages) ? incomingMessages : [];
+  if (base.length === 0) return next.slice();
+  if (next.length === 0) return base;
 
-    setTimeout(function scrollDown() {
-      if (Date.now() - startTime > TOTAL_TIMEOUT) {
-        // Timed out during scroll-down, still try scroll-up
-        scrollUpToTop();
-        return;
+  const baseSignatures = base.map(getMessageSignature);
+  const nextSignatures = next.map(getMessageSignature);
+  const maxOverlap = Math.min(base.length, next.length);
+
+  for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
+    let matched = true;
+    for (let index = 0; index < overlap; index += 1) {
+      if (baseSignatures[base.length - overlap + index] !== nextSignatures[index]) {
+        matched = false;
+        break;
       }
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      if (scrollTop + clientHeight >= scrollHeight - 10) {
-        // Reached bottom, now scroll back up
-        setTimeout(scrollUpToTop, 300);
-        return;
-      }
-      container.scrollTop = scrollTop + clientHeight * 0.8;
-      setTimeout(scrollDown, STEP_DELAY);
-    }, 300);
-
-    // Phase 2: scroll back to top so oldest messages are rendered
-    function scrollUpToTop() {
-      const upStart = Date.now();
-      function scrollUp() {
-        if (Date.now() - upStart > TOTAL_TIMEOUT) {
-          resolve();
-          return;
-        }
-        const { scrollTop, clientHeight } = container;
-        if (scrollTop <= 10) {
-          // Reached top - wait for render then resolve
-          setTimeout(resolve, 400);
-          return;
-        }
-        container.scrollTop = Math.max(0, scrollTop - clientHeight * 0.8);
-        setTimeout(scrollUp, STEP_DELAY);
-      }
-      scrollUp();
     }
-  });
+    if (matched) {
+      return base.concat(next.slice(overlap));
+    }
+  }
+
+  const baseSignatureSet = new Set(baseSignatures);
+  const pending = [];
+  for (const message of next) {
+    const signature = getMessageSignature(message);
+    if (!baseSignatureSet.has(signature) || pending.length > 0) {
+      pending.push(message);
+    }
+  }
+  return base.concat(pending);
+}
+
+async function prepareVisibleMessages() {
+  await waitForDiagramBlocksReady(2500);
+  await prepareDiagramCodeBlocks();
+}
+
+async function collectAllMessagesFromChat() {
+  const container = getChatScrollContainer();
+  if (!container) {
+    return extractAllMessagesFromPage();
+  }
+
+  const originalTop = getContainerScrollTop(container);
+  const startedAt = Date.now();
+  const timeoutMs = 90000;
+  let title = '';
+  let messages = [];
+
+  try {
+    await scrollToTopForCollection(container);
+
+    let idlePasses = 0;
+    let lastLength = 0;
+
+    while (Date.now() - startedAt < timeoutMs) {
+      await prepareVisibleMessages();
+      const snapshot = extractAllMessagesFromPage(document, { cloneDomNodes: true });
+      if (snapshot.title && !title) {
+        title = snapshot.title;
+      }
+
+      const previousLength = messages.length;
+      messages = mergeMessageSnapshots(messages, snapshot.messages || []);
+      const addedCount = messages.length - previousLength;
+      updateExportingOverlay((chrome.i18n.getMessage('exportingProcessing') || 'Processing…') + ` ${messages.length}`);
+
+      const currentTop = getContainerScrollTop(container);
+      const clientHeight = getContainerClientHeight(container);
+      const scrollHeight = getContainerScrollHeight(container);
+      const atBottom = currentTop + clientHeight >= scrollHeight - 4;
+
+      if (atBottom) {
+        if (messages.length === lastLength) {
+          idlePasses += 1;
+        } else {
+          idlePasses = 0;
+          lastLength = messages.length;
+        }
+        if (idlePasses >= 2 || addedCount === 0) {
+          break;
+        }
+      }
+
+      const step = Math.max(220, clientHeight * 0.45);
+      const nextTop = Math.min(scrollHeight - clientHeight, currentTop + step);
+      if (nextTop <= currentTop + 1) {
+        if (messages.length === lastLength) {
+          idlePasses += 1;
+        } else {
+          idlePasses = 0;
+          lastLength = messages.length;
+        }
+        if (idlePasses >= 2) {
+          break;
+        }
+      }
+
+      setContainerScrollTop(container, nextTop);
+      await waitForScrollSettle(container, currentTop);
+    }
+
+    if (messages.length === 0) {
+      await prepareVisibleMessages();
+      return extractAllMessagesFromPage(document, { cloneDomNodes: true });
+    }
+
+    return {
+      title: title || getConversationTitle(),
+      messages
+    };
+  } finally {
+    setContainerScrollTop(container, originalTop);
+  }
 }
 
 function showExportingOverlay(message) {
@@ -378,12 +550,8 @@ function hideExportingOverlay() {
 async function exportChat(format) {
   showExportingOverlay(chrome.i18n.getMessage('exportingScrolling') || 'Loading all messages…');
   try {
-    await scrollToRevealAll();
-    updateExportingOverlay(chrome.i18n.getMessage('exportingProcessing') || 'Processing…');
-    await waitForDiagramBlocksReady();
-    await prepareDiagramCodeBlocks();
     const settings = await getSettings();
-    const {title, messages} = extractAllMessagesFromPage();
+    const {title, messages} = await collectAllMessagesFromChat();
     hideExportingOverlay();
     if (!Array.isArray(messages) || messages.length === 0) {
       alert(chrome.i18n.getMessage('noMessagesFound'));
@@ -1649,28 +1817,20 @@ function extractParagraphs(element) {
  * 从页面中提取所有消息
  * @returns {Array} 消息数组
  */
-function extractAllMessagesFromPage() {
+function extractAllMessagesFromPage(root = document, options = {}) {
   try {
-    // 1. 查找用户问题
-    const userQuestions = document.querySelectorAll('.fbb737a4');
-
-    // 2. 查找AI回答
-    const aiResponses = document.querySelectorAll('.ds-message .ds-markdown:not(.ds-think-content .ds-markdown)');
-
-    // 3. 查找思考过程容器
-    const cotContainers = document.querySelectorAll('.ds-message .ds-think-content');
-
-    // 4. 查找对话标题
+    const cloneDomNodes = !!(options && options.cloneDomNodes);
+    const userQuestions = root.querySelectorAll('.fbb737a4');
+    const aiResponses = root.querySelectorAll('.ds-message .ds-markdown:not(.ds-think-content .ds-markdown)');
+    const cotContainers = root.querySelectorAll('.ds-message .ds-think-content');
     const conversationTitle = getConversationTitle();
 
     if (userQuestions.length === 0 && aiResponses.length === 0 && cotContainers.length === 0) {
       return { };
     }
 
-    // 创建一个数组来存储所有消息元素及其类型和位置
     const allElements = [];
 
-    // 添加用户问题
     userQuestions.forEach(el => {
       allElements.push({
         element: el,
@@ -1678,7 +1838,6 @@ function extractAllMessagesFromPage() {
       });
     });
 
-    // 添加AI回答
     aiResponses.forEach(el => {
       allElements.push({
         element: el,
@@ -1686,7 +1845,6 @@ function extractAllMessagesFromPage() {
       });
     });
 
-    // 添加思考过程容器
     cotContainers.forEach(el => {
       allElements.push({
         element: el,
@@ -1694,7 +1852,6 @@ function extractAllMessagesFromPage() {
       });
     });
 
-    // 按照元素在DOM中的位置排序
     allElements.sort((a, b) => {
       const pos = a.element.compareDocumentPosition(b.element);
       if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
@@ -1702,7 +1859,6 @@ function extractAllMessagesFromPage() {
       return 0;
     });
 
-    // 处理排序后的元素
     const messages = [];
     let cot = null;
     allElements.forEach((item, index) => {
@@ -1710,7 +1866,6 @@ function extractAllMessagesFromPage() {
       if (type === 'user') {
         const attachments = extractUserAttachments(element);
         const content = formatUserContent(element.textContent.trim(), attachments);
-        // 处理用户问题
         const message = {
           role: 'user',
           content,
@@ -1722,10 +1877,9 @@ function extractAllMessagesFromPage() {
         messages.push(message);
       }
       else if (type === 'ai') {
-        // 处理AI回答
         const message = {
           role: 'assistant',
-          content: element,
+          content: cloneDomNodes ? element.cloneNode(true) : element,
           element_id: element.id || `ai-${index}-${Date.now()}`
         };
         if (cot !== null) {
@@ -1735,7 +1889,7 @@ function extractAllMessagesFromPage() {
         messages.push(message);
       }
       else if (type === 'cot') {
-        cot = element;
+        cot = cloneDomNodes ? element.cloneNode(true) : element;
       }
     });
     return { title: conversationTitle, messages };
