@@ -341,12 +341,12 @@ function setContainerScrollTop(container, value) {
   container.scrollTop = nextValue;
 }
 
-async function waitForScrollSettle(container, previousTop, timeoutMs = 1500) {
+async function waitForScrollSettle(container, previousTop, timeoutMs = 900) {
   const start = Date.now();
   let stableTicks = 0;
   let lastTop = getContainerScrollTop(container);
   while (Date.now() - start < timeoutMs) {
-    await delay(120);
+    await delay(80);
     const currentTop = getContainerScrollTop(container);
     const currentHeight = getContainerScrollHeight(container);
     if (Math.abs(currentTop - lastTop) <= 1) {
@@ -362,7 +362,7 @@ async function waitForScrollSettle(container, previousTop, timeoutMs = 1500) {
       break;
     }
   }
-  await delay(150);
+  await delay(80);
 }
 
 async function scrollToTopForCollection(container, timeoutMs = 30000) {
@@ -397,15 +397,25 @@ function getMessageSignature(message) {
   return `${message.role}::${normalize(message.content)}::${attachmentText}`;
 }
 
-function mergeMessageSnapshots(existingMessages, incomingMessages) {
+function mergeMessageSnapshots(existingMessages, existingSignatures, incomingMessages) {
   const base = Array.isArray(existingMessages) ? existingMessages.slice() : [];
+  const baseSignatures = Array.isArray(existingSignatures) ? existingSignatures.slice() : base.map(getMessageSignature);
   const next = Array.isArray(incomingMessages) ? incomingMessages : [];
-  if (base.length === 0) return next.slice();
-  if (next.length === 0) return base;
-
-  const baseSignatures = base.map(getMessageSignature);
   const nextSignatures = next.map(getMessageSignature);
-  const maxOverlap = Math.min(base.length, next.length);
+  if (base.length === 0) {
+    return {
+      messages: next.slice(),
+      signatures: nextSignatures
+    };
+  }
+  if (next.length === 0) {
+    return {
+      messages: base,
+      signatures: baseSignatures
+    };
+  }
+
+  const maxOverlap = Math.min(base.length, next.length, 120);
 
   for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
     let matched = true;
@@ -416,19 +426,52 @@ function mergeMessageSnapshots(existingMessages, incomingMessages) {
       }
     }
     if (matched) {
-      return base.concat(next.slice(overlap));
+      return {
+        messages: base.concat(next.slice(overlap)),
+        signatures: baseSignatures.concat(nextSignatures.slice(overlap))
+      };
     }
   }
 
-  const baseSignatureSet = new Set(baseSignatures);
-  const pending = [];
-  for (const message of next) {
-    const signature = getMessageSignature(message);
-    if (!baseSignatureSet.has(signature) || pending.length > 0) {
-      pending.push(message);
+  const tailWindow = baseSignatures.slice(-80);
+  let anchorIndex = -1;
+  for (let index = nextSignatures.length - 1; index >= 0; index -= 1) {
+    if (tailWindow.includes(nextSignatures[index])) {
+      anchorIndex = index;
+      break;
     }
   }
-  return base.concat(pending);
+
+  if (anchorIndex >= 0) {
+    return {
+      messages: base.concat(next.slice(anchorIndex + 1)),
+      signatures: baseSignatures.concat(nextSignatures.slice(anchorIndex + 1))
+    };
+  }
+
+  const baseSignatureSet = new Set(baseSignatures.slice(-200));
+  const pending = [];
+  const pendingSignatures = [];
+  next.forEach((message, index) => {
+    const signature = nextSignatures[index];
+    if (!baseSignatureSet.has(signature) || pending.length > 0) {
+      pending.push(message);
+      pendingSignatures.push(signature);
+    }
+  });
+
+  return {
+    messages: base.concat(pending),
+    signatures: baseSignatures.concat(pendingSignatures)
+  };
+}
+
+function buildSnapshotFingerprint(signatures) {
+  const list = Array.isArray(signatures) ? signatures : [];
+  if (list.length === 0) return '0';
+  const head = list.slice(0, 2).join('||');
+  const tail = list.slice(-2).join('||');
+  return `${list.length}::${head}::${tail}`;
 }
 
 async function prepareVisibleMessages() {
@@ -447,23 +490,38 @@ async function collectAllMessagesFromChat() {
   const timeoutMs = 90000;
   let title = '';
   let messages = [];
+  let messageSignatures = [];
 
   try {
     await scrollToTopForCollection(container);
 
     let idlePasses = 0;
     let lastLength = 0;
+    let lastFingerprint = '';
+    let stagnantPasses = 0;
 
     while (Date.now() - startedAt < timeoutMs) {
       await prepareVisibleMessages();
       const snapshot = extractAllMessagesFromPage(document, { cloneDomNodes: true });
+      const snapshotMessages = snapshot.messages || [];
+      const snapshotSignatures = snapshotMessages.map(getMessageSignature);
       if (snapshot.title && !title) {
         title = snapshot.title;
       }
 
       const previousLength = messages.length;
-      messages = mergeMessageSnapshots(messages, snapshot.messages || []);
+      const merged = mergeMessageSnapshots(messages, messageSignatures, snapshotMessages);
+      messages = merged.messages;
+      messageSignatures = merged.signatures;
       const addedCount = messages.length - previousLength;
+      const fingerprint = buildSnapshotFingerprint(snapshotSignatures);
+      if (fingerprint === lastFingerprint) {
+        stagnantPasses += 1;
+      } else {
+        stagnantPasses = 0;
+        lastFingerprint = fingerprint;
+      }
+
       updateExportingOverlay((chrome.i18n.getMessage('exportingProcessing') || 'Processing…') + ` ${messages.length}`);
 
       const currentTop = getContainerScrollTop(container);
@@ -483,7 +541,12 @@ async function collectAllMessagesFromChat() {
         }
       }
 
-      const step = Math.max(220, clientHeight * 0.45);
+      if (stagnantPasses >= 2 && addedCount === 0) {
+        break;
+      }
+
+      const stepRatio = stagnantPasses > 0 ? 0.95 : 0.8;
+      const step = Math.max(420, clientHeight * stepRatio);
       const nextTop = Math.min(scrollHeight - clientHeight, currentTop + step);
       if (nextTop <= currentTop + 1) {
         if (messages.length === lastLength) {
