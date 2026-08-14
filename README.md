@@ -1,3 +1,5 @@
+
+
 # DeepSeek Chat Exporter
 
 A Chrome extension that allows you to export your DeepSeek chat conversations in multiple formats.
@@ -32,7 +34,7 @@ A Chrome extension that allows you to export your DeepSeek chat conversations in
 
 1. Visit any DeepSeek chat page
 2. The extension will automatically monitor and capture all messages
-3. Click the "Export Chat" button in the bottom-right corner
+3. Click the "Export Chat" button in the top-right corner
 4. Select your preferred export format (JSON, Markdown, HTML, or Text)
 5. The conversation will be downloaded in your chosen format
 
